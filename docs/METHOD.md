@@ -80,14 +80,35 @@ honestly in evaluation (see EVALUATION.md).
 > and if you do implement a weighted option, keep the simple mean available behind the
 > same config knob so the two can be compared.
 
-> **NEEDS DECISION (how tau is set).** It is not decided whether `tau` is a single
-> fixed constant, a value chosen per corpus (for example a percentile of observed
-> intra-top-k similarities), or tuned on a small dev split. Treat `tau` as a config
-> value with a documented interim default, and surface this choice rather than
-> quietly settling it. Note that a badly chosen `tau` breaks the whole story: too
-> high and the gate never fires, too low and it fires on nearly everything and the
-> efficiency advantage disappears. EVALUATION.md asks for a small sensitivity sweep
-> over `tau` for exactly this reason.
+> **DECIDED for now (how tau is set): a fixed value of 0.80, pinned in config.** How to
+> choose it dynamically per dataset is deferred to the 100 percent version and stays open.
+>
+> How 0.80 was arrived at, since "we picked a number" is not a viva answer. The gate
+> signal was measured over 136 pseudo-queries, using each chunk as a stand-in query and
+> taking its top-3. Signals ran 0.691 to 0.868 with a mean of 0.785, which sits about
+> 0.10 above the corpus-wide pair mean of 0.684. That lift is expected: the top-k are all
+> relevant to the same query, so they are more alike than random chunk pairs. It also
+> rules out anchoring tau to the corpus distribution, which would trip on nearly every
+> query.
+>
+> The anchor used instead is independent of tau: **30.1 percent of top-3 sets contain a
+> pair above `delta`**, meaning they hold a genuine near-duplicate. The gate is a cheap
+> proxy for exactly that condition, so tau is set where the trigger rate matches it.
+> p70 of the signal distribution is 0.801, giving a 30.1 percent trigger rate. Rounded to
+> 0.80.
+>
+> This deliberately avoids a circular choice. Setting tau to a percentile picked for a
+> nice-looking trigger rate would make the headline metric a restatement of the choice
+> rather than a finding. Deriving it from `delta` keeps it honest.
+>
+> **Two warnings.** The measurement used chunks as stand-in queries, so re-measure once
+> the real query set exists. And tau is coupled to `k`: more pairs dilute the mean, so at
+> k=5 the same distribution has p70 at 0.785 while duplicate presence rises to 53.7
+> percent. A tau of 0.80 at k=5 would fire on almost nothing. Re-derive tau whenever k
+> changes.
+>
+> EVALUATION.md's sensitivity sweep over `tau` still applies and is the primary defence
+> against any single value being wrong.
 
 ## 5. The repair
 
@@ -110,10 +131,23 @@ backfill from reintroducing redundancy.
 
 The following details are genuinely open. Do not assume any of them.
 
-> **NEEDS DECISION (delta setting).** Same question as `tau`: fixed constant versus
-> data-driven. Interim default is a fixed config value. `delta` (the "these two are
-> duplicates" line) and `tau` (the "the set as a whole is too redundant" line) are two
-> independent knobs doing two different jobs. Keep them separate in config.
+> **DECIDED for now (delta setting): a fixed value of 0.834, pinned in config.** How to
+> choose it dynamically per dataset is deferred to the 100 percent version and stays open.
+>
+> 0.834 is p99.5 of the 9,180 corpus chunk-pair similarities, and it was checked by
+> reading pairs at each level rather than taken on faith. Pairs above 0.90 are genuine
+> near-verbatim duplicates: the top pair at 0.934 shares whole sentences between the
+> Diabetes and Type 2 articles. Pairs near 0.78 are merely on the same subject and share
+> vocabulary, nothing more. The deciding case was p99 (0.816), which would have flagged
+> c0 and c1 at 0.823, and those are **adjacent continuation chunks of the same article**,
+> complementary rather than duplicate. 0.834 excludes them. It flags 46 pairs of 9,180.
+>
+> Caveat for honesty: this rests on inspecting six pairs. The signal was consistent but
+> the sample is small, and widening it would strengthen the number.
+>
+> `delta` (the "these two are duplicates" line) and `tau` (the "the set as a whole is too
+> redundant" line) remain two independent knobs doing two different jobs. Keep them
+> separate in config.
 
 > **NEEDS DECISION (multi-way redundancy).** The plain rule "drop the lower-relevance
 > member of each over-delta pair" only behaves well for isolated pairs. When three or

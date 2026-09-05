@@ -30,11 +30,14 @@ the detail belongs in the other three docs.
 - Tie-break: relevance desc, then chunk id asc, stable sort
 - k = 3 and tunable, pool_size = 5k
 - MMR lambda = 0.7
+- `delta` = 0.834 INTERIM, p99.5 of corpus pairs, checked by reading pairs at the boundary
+- `tau` = 0.80 INTERIM, p70 of measured signals, matches the 30.1% of top-3 sets that
+  really do contain a pair above delta. TIED TO k=3, re-derive if k changes.
 
 ## Still open
 
-- `tau`: the value, and whether it is fixed, a percentile, or tuned
-- `delta`: same question
+- `tau` and `delta` for the FINAL version: how they are chosen dynamically per dataset.
+  Both are pinned to fixed interim values for now (see Settled).
 - Gate averaging: simple mean vs relevance-weighted
 - Multi-way redundancy: how three mutually similar chunks get resolved
 - Backfill acceptance check: pairwise delta vs set-level tau
