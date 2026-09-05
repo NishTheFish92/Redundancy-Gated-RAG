@@ -54,6 +54,8 @@ Project title: Redundancy-Gated Retrieval: Optimized Diversification of RAG Cont
 - **docs/IMPLEMENTATION_PLAN.md** - stack detail, staged build order, the definition
   of the 70% milestone, suggested repo layout, function signatures, and the config
   schema.
+- **docs/CHECKLIST.md** - short status board. Read this first, it is the fastest way
+  to see which stage the build is on and which decisions are settled or still open.
 
 ## Operating rules (important)
 
@@ -81,6 +83,10 @@ Project title: Redundancy-Gated Retrieval: Optimized Diversification of RAG Cont
    pick a clearly-labeled interim default, and leave a visible `# NEEDS DECISION:`
    comment explaining the tradeoff. A silent default baked into logic, where the team
    never learns a choice was even made, is the one outcome to avoid.
+
+   Once a decision is settled, write it back into the relevant doc as a **DECIDED**
+   note with the reasoning, and update docs/CHECKLIST.md. A settled decision should
+   never have to be re-argued from memory.
 2. **The method and the evaluation criteria are fixed.** Do not redesign them. If you
    spot a genuine problem, flag it and wait, do not quietly "fix" it in code.
 3. **Every knob is a config parameter.** tau, delta, k, pool size, lambda (for the

@@ -15,30 +15,91 @@ first and the low-risk writeup work is left for the end.
 - Similarity matrix and metrics: numpy, with scikit-learn available if convenient.
 - Config in a single YAML or Python config module. Every knob lives there.
 
-> **NEEDS DECISION (BGE usage details).** bge-base-en-v1.5 has two easy-to-miss
-> conventions that affect correctness: embeddings are meant to be L2-normalized before
-> cosine similarity, and the retrieval query is meant to carry an instruction prefix
-> (the "Represent this sentence for searching relevant passages:" style prefix) while
-> the passages do not. Whether to apply the prefix, and confirming normalization, both
-> change the numbers. Do not silently pick one. Surface it, apply a documented default,
-> and keep it configurable. Chunk-to-chunk similarity must use the same normalized
-> space as query-to-chunk.
+> **DECIDED (BGE usage details).** Both of bge-base-en-v1.5's easy-to-miss conventions
+> are applied, and both stay configurable.
+>
+> **Normalization: on.** Every embedding is L2-normalized at encode time
+> (`normalize_embeddings=True`), queries and passages alike. Normalizing keeps a
+> vector's direction and sets its length to 1, which does three things. Cosine
+> similarity becomes a plain dot product, so the entire corpus similarity matrix is
+> one cached `S = E @ E.T` and every later similarity is a lookup rather than a
+> calculation. Vector length, which drifts with things like verbosity, stops leaking
+> into the score. And scores land in a fixed [-1, 1] range, which is the only reason a
+> single global `tau` and `delta` can mean the same thing for every pair in the corpus.
+>
+> **Query prefix: on.** Retrieval queries carry the BGE instruction prefix,
+> "Represent this sentence for searching relevant passages: ". Passages get no prefix.
+> This is documented model usage and a reviewer familiar with BGE will ask about it.
+> The prefix text itself is a config value so the no-prefix ablation stays one edit
+> away.
+>
+> Note for later: BGE has a high similarity floor. Unrelated English text often scores
+> around 0.6 to 0.7 rather than near 0. Expect this, measure the actual distribution
+> before choosing `tau` and `delta`, and do not carry the METHOD.md worked-example
+> values over to the real corpus.
 
 ## 2. Dataset
 
-Do not reach for a full BEIR benchmark. Use a small, controlled corpus of roughly 500
-to 1500 chunks, for example chunks drawn from a handful of Wikipedia articles or a
-small slice of a QA dataset such as SQuAD or HotpotQA. Small enough to sanity-check
-gate behavior by hand on a few queries and to rerun experiments quickly.
+Do not reach for a full BEIR benchmark. The corpus is small and controlled so gate
+behavior can be sanity-checked by hand on a few queries and experiments rerun quickly.
 
-> **NEEDS DECISION (corpus redundancy level).** The gate only has something to do when
-> the corpus produces redundant top-k results. A corpus built from distinct,
-> non-overlapping articles may almost never trip the gate, which makes the method look
-> like it does nothing. A denser collection with genuine near-duplicate content
-> (medical FAQ sets, product manuals, overlapping news) is closer to real RAG
-> conditions and will actually exercise the gate. Choose the corpus with this in mind,
-> and raise it if the early trigger rate comes out near zero. This is a data choice,
-> not a reason to touch the method.
+**DECIDED (corpus).** Three Wikipedia articles: Diabetes, Type 1 diabetes, and Type 2
+diabetes. This is chosen specifically for the redundancy problem flagged below. The
+three articles cover heavily overlapping ground (symptoms, causes, diagnosis,
+management, complications), so genuine near-duplicate content exists **across
+documents**, which is exactly the condition the gate is built for. A set of unrelated
+articles would rarely trip the gate and would make the method look like it does
+nothing.
+
+**DECIDED (freezing the corpus).** Wikipedia articles change. The three articles are
+fetched **once** into `data/raw/*.txt` and those files are committed. Every later run
+reads from disk. This keeps results reproducible weeks later at writeup time and stops
+a teammate's rerun from silently differing. The fetch script lives in `scripts/` and is
+run manually, never as part of the pipeline.
+
+**DECIDED (cleaning).** Before chunking, strip the sections that are formatting noise
+rather than content: References, External links, See also, Further reading, Notes.
+Reference lists in particular embed strangely and would pollute the similarity matrix.
+The list of stripped section names is a config value.
+
+### Chunking
+
+**DECIDED: fixed-size word windows, no overlap.**
+
+- `chunk_size_words: 150`. Windows are taken over the cleaned article text.
+- `overlap_words: 0`. Overlapping chunks are near-duplicates by construction, so
+  overlap would manufacture the very redundancy the method claims to find in the data.
+  A reviewer can fairly attack a redundancy result built on an overlapping chunker.
+  Zero overlap means every near-duplicate pair the gate finds is real.
+- `min_chunk_words: 30`. The trailing window of each article can be very short. Drop
+  it if it falls under the floor.
+- Windows never cross article boundaries. Each of the three articles is chunked
+  independently.
+
+Why fixed-size rather than paragraph or recursive splitting: the method applies two
+**global** thresholds, `tau` and `delta`, to one similarity distribution. That only
+works if every chunk is a comparable object. Short chunks cover one narrow idea and
+score high against anything touching it, long chunks average over several ideas and
+sit in a mushy middle band, so uneven chunk lengths put a length artifact into the
+similarity matrix that a single global threshold then has to serve. Fixed-size windows
+give near-uniform lengths and the cleanest distribution to set thresholds against.
+
+Fixed-size windows also sidestep a concrete trap on this corpus. All three articles
+have a "Signs and symptoms" heading, a "Causes" heading, and so on. Any splitter that
+respects line structure can emit those headings as their own tiny chunks, which then
+match each other at very high similarity across articles. Those are real duplicate
+pairs but completely uninteresting ones, and they would inflate the duplicate-rate
+metric with an artifact a viva panel would enjoy finding. Fixed windows absorb headings
+mid-chunk instead.
+
+The accepted cost is that windows cut sentences mid-way. That is cosmetic for the
+embedding model, and only slightly ugly when printing a chunk on a slide.
+
+> **NEEDS DECISION (short-fragment handling).** Trailing stubs under `min_chunk_words`
+> are currently dropped. Merging them into the previous chunk instead would keep every
+> word at the cost of some length variance. Drop is the interim default because what it
+> discards is a handful of sentence tails. Worth a one-line answer in the viva either
+> way, since it explains the exact chunk count.
 
 ## 3. Staged build order
 
@@ -75,21 +136,41 @@ project/
     METHOD.md
     EVALUATION.md
     IMPLEMENTATION_PLAN.md
+    CHECKLIST.md         # short status board, read this first
   config.yaml            # every knob lives here
   src/
-    corpus.py            # load + chunk the corpus
-    embed.py             # bge-base embedding, normalization, index build
+    corpus.py            # load + clean + chunk the corpus
+    embed.py             # bge-base embedding, normalization, similarity matrix
     retrieve.py          # pool retrieval + plain top-k
     gate.py              # gate signal + trip decision
     repair.py            # dedup + backfill
     mmr.py               # MMR baseline
     metrics.py           # all evaluation metrics
     experiment.py        # run all three methods over a query set, collect results
+  scripts/
+    fetch_corpus.py      # run once, writes data/raw/*.txt
+  notebooks/
+    01_explore_corpus.ipynb   # chunk stats, eyeball retrieval
+    02_pick_thresholds.ipynb  # similarity distributions -> evidence for tau, delta
+    03_results.ipynb          # tables and the tau sweep
   tests/
     test_worked_example.py   # the METHOD.md fixture
-  data/                  # corpus + queries
+  data/
+    raw/                 # frozen Wikipedia text, committed
+    queries.json         # the query set
   results/               # experiment output tables
 ```
+
+**DECIDED (notebooks versus modules).** `src/` holds the real code. Notebooks import
+from it and never define pipeline logic. The reasons: the worked example has to run
+under `pytest`, which cannot easily import from a notebook; the comparison counters are
+the number the whole contribution rests on and must not drift between copy-pasted
+cells; notebook diffs are unreadable JSON and merge badly for a three-person team; and
+"show me the gate" is better answered by a short `gate.py` than by scrolling a
+notebook. Notebooks earn their place for the parts that are genuinely exploratory:
+keeping the loaded model in memory, looking at similarity distributions to choose
+thresholds, and producing report figures. Commit notebooks with outputs stripped
+(`nbstripout`).
 
 ## 6. Function signatures (starting point, adjust as needed)
 
@@ -97,14 +178,24 @@ These are a sketch to anchor the structure, not a contract. Where a signature to
 an open decision, the decision still has to be made first.
 
 ```python
+# corpus.py
+def load_pages(raw_dir: str, strip_sections: list[str]) -> dict[str, str]:
+    """Read the frozen raw text, cut the noise sections. Returns {page_title: text}."""
+def chunk_pages(pages, chunk_size_words, overlap_words, min_chunk_words) -> list[Chunk]:
+    """Fixed-size word windows, never crossing a page boundary. Chunk carries
+    id, text, source page, and word count."""
+
 # embed.py
 def embed_texts(texts: list[str], normalize: bool = True) -> np.ndarray: ...
-# NEEDS DECISION: query instruction prefix (see section 1)
-def embed_query(query: str) -> np.ndarray: ...
+def embed_query(query: str, prefix: str | None) -> np.ndarray:
+    """Applies the BGE instruction prefix to the query only. Passages get none."""
+def similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
+    """S = E @ E.T on normalized embeddings. Computed once, cached to disk."""
 
 # retrieve.py
-def retrieve_pool(query_emb, index, pool_size: int) -> list[tuple[int, float]]:
-    """Return [(chunk_id, relevance_to_query), ...] sorted by relevance desc."""
+def retrieve_pool(query_emb, chunk_embs, pool_size: int) -> list[tuple[int, float]]:
+    """Return [(chunk_id, relevance_to_query), ...] sorted by relevance desc,
+    ties broken by chunk id ascending."""
 def plain_top_k(pool: list[tuple[int, float]], k: int) -> list[int]: ...
 
 # gate.py
@@ -144,12 +235,30 @@ final decisions, marked accordingly. Do not move any of these into inline consta
 ```yaml
 model:
   name: "BAAI/bge-base-en-v1.5"
-  normalize: true              # NEEDS DECISION: confirm (section 1)
-  query_prefix: true           # NEEDS DECISION: apply bge query instruction? (section 1)
+  normalize: true              # DECIDED: L2 normalize, cosine becomes a dot product
+  query_prefix: true           # DECIDED: apply the BGE retrieval instruction
+  query_prefix_text: "Represent this sentence for searching relevant passages: "
+
+corpus:
+  raw_dir: "data/raw"
+  pages:                       # DECIDED: overlapping content, exercises the gate
+    - "Diabetes"
+    - "Type 1 diabetes"
+    - "Type 2 diabetes"
+  strip_sections:              # DECIDED: cut before chunking
+    - "References"
+    - "External links"
+    - "See also"
+    - "Further reading"
+    - "Notes"
+  chunk_size_words: 150        # DECIDED: fixed-size windows
+  overlap_words: 0             # DECIDED: no overlap, redundancy must be real
+  min_chunk_words: 30          # DECIDED: drop the trailing stub if shorter
 
 retrieval:
-  pool_size: <undecided>       # NEEDS DECISION: must be comfortably > 2k, not just > k
   k: 3                         # matches the worked example; real runs may use larger k
+  pool_multiplier: 5           # DECIDED: pool_size = k * pool_multiplier, so k=5 -> 25
+  tie_break: "chunk_id_asc"    # DECIDED: relevance desc, then chunk id asc, stable sort
 
 gate:
   tau: <undecided>             # NEEDS DECISION: fixed vs percentile vs tuned (METHOD.md)

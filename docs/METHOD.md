@@ -139,10 +139,13 @@ The following details are genuinely open. Do not assume any of them.
 > larger pool up front. Decide this, and see the pool-sizing note in
 > IMPLEMENTATION_PLAN.md.
 
-> **NEEDS DECISION (similarity space).** Confirm that chunk-to-chunk similarity is
-> computed in the same embedding space as query-to-chunk similarity (it should be),
-> and confirm the metric (cosine is assumed). Normalization details live in
-> IMPLEMENTATION_PLAN.md but affect correctness here, so do not leave them implicit.
+> **DECIDED (similarity space).** All embeddings are L2-normalized at encode time, so
+> cosine similarity is a plain dot product. Queries and passages are normalized
+> identically, which is what guarantees query-to-chunk and chunk-to-chunk similarity
+> live in the same space. The whole corpus similarity matrix is computed once as
+> `S = E @ E.T` and cached, so nothing recomputes a similarity at run time and one
+> "similarity comparison" means exactly one lookup in `S`. See
+> IMPLEMENTATION_PLAN.md section 1.
 
 ## 6. MMR baseline (for comparison only)
 
@@ -183,11 +186,22 @@ work.
 Wire this example up as a unit-test fixture. Both methods should reproduce {A, C, D}
 on it, and the metric functions should reproduce the numbers in EVALUATION.md.
 
+**These numbers are synthetic and that is deliberate.** The fixture feeds a
+hand-written similarity matrix straight into the functions, it does not run the
+embedding model. So the test stays valid no matter what real BGE similarities turn out
+to be. Do not read the example's `delta = 0.8` and `tau = 0.35` as starting values for
+the real corpus. BGE has a high similarity floor: unrelated English text commonly
+scores around 0.6 to 0.7 rather than near 0, so a real `tau` of 0.35 would trip on
+every query. Real thresholds must be read off the measured distribution, which is what
+the sensitivity sweep in EVALUATION.md is for.
+
 ## 8. Known edge cases to handle (not to gloss over)
 
 - **Full redundancy triangle at small k.** See the multi-way redundancy decision above.
 - **Pool exhaustion during backfill.** See the fallback decision above.
 - **Gate never fires on a too-diverse corpus.** Not a bug in the method, but it makes
   results look flat. Handled at the dataset level, see IMPLEMENTATION_PLAN.md.
-- **Ties in relevance ordering.** Define a deterministic tie-break so runs are
-  reproducible. Flag the choice if it could affect which chunk gets kept or dropped.
+- **Ties in relevance ordering.** DECIDED: sort by relevance descending, break ties by
+  chunk id ascending, using a stable sort. This applies everywhere an ordering is
+  taken: pool ordering, plain top-k, the dedup keep/drop choice, and backfill order.
+  Runs are then reproducible.
