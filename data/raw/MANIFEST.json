@@ -1,0 +1,30 @@
+{
+  "fetched_at": "2026-09-05T10:42:12+00:00",
+  "source": "https://en.wikipedia.org/w/api.php",
+  "pages": [
+    {
+      "requested_title": "Diabetes",
+      "resolved_title": "Diabetes",
+      "revision_id": 1372882891,
+      "revision_timestamp": "2026-09-02T19:51:24Z",
+      "file": "diabetes.txt",
+      "raw_word_count": 7057
+    },
+    {
+      "requested_title": "Type 1 diabetes",
+      "resolved_title": "Type 1 diabetes",
+      "revision_id": 1373317014,
+      "revision_timestamp": "2026-09-05T07:15:22Z",
+      "file": "type_1_diabetes.txt",
+      "raw_word_count": 8970
+    },
+    {
+      "requested_title": "Type 2 diabetes",
+      "resolved_title": "Type 2 diabetes",
+      "revision_id": 1373316858,
+      "revision_timestamp": "2026-09-05T07:13:09Z",
+      "file": "type_2_diabetes.txt",
+      "raw_word_count": 4626
+    }
+  ]
+}
