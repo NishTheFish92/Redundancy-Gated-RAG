@@ -56,6 +56,8 @@ Project title: Redundancy-Gated Retrieval: Optimized Diversification of RAG Cont
   schema.
 - **docs/CHECKLIST.md** - short status board. Read this first, it is the fastest way
   to see which stage the build is on and which decisions are settled or still open.
+- **docs/FORMULAS.md** - one page reference sheet of every formula in the project, each
+  with its symbols and a checkable number from the worked example.
 
 ## Operating rules (important)
 

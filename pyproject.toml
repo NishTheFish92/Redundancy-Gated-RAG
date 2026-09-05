@@ -4,4 +4,26 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "pyyaml>=6.0.3",
+    "sentence-transformers>=6.0.1",
+    "torch>=2.14.0",
+]
+
+[dependency-groups]
+dev = [
+    "requests>=2.34.2",
+]
+
+# Pin torch to the CPU-only wheels. The corpus is 136 chunks, so the GPU saves nothing
+# measurable, and CPU-only means all three of us produce byte-identical similarities.
+# That matters because tau and delta are read off the measured distribution and compared
+# with a strict ">", so last-decimal differences between machines could flip whether the
+# gate trips on a borderline query, which is the headline metric.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

@@ -58,9 +58,20 @@ a teammate's rerun from silently differing. The fetch script lives in `scripts/`
 run manually, never as part of the pipeline.
 
 **DECIDED (cleaning).** Before chunking, strip the sections that are formatting noise
-rather than content: References, External links, See also, Further reading, Notes.
-Reference lists in particular embed strangely and would pollute the similarity matrix.
-The list of stripped section names is a config value.
+rather than content: References, External links, See also, Further reading, Notes, and
+Works cited. The list of stripped section names is a config value.
+
+Be accurate about what this step achieves, because the measured version is smaller than
+the original reasoning implied. The worry was that reference lists embed strangely and
+would pollute the similarity matrix. On the actual fetched text, cleaning removes only
+about 2 percent of each article, because the Wikipedia plaintext extract API has already
+discarded citation content: References and Works cited arrive as headings with **zero**
+words underneath them, and External links is roughly 50 words. So what the step really
+removes is a small links section plus a few orphan heading words. Keep it, those orphan
+words would otherwise sit in a chunk as body text, but do not claim in the writeup that
+it cut out a large mass of citation noise. Works cited was added to the list only after
+inspecting the fetched text, where it appeared as exactly that kind of orphan heading on
+the Type 1 article.
 
 ### Chunking
 
@@ -95,11 +106,36 @@ mid-chunk instead.
 The accepted cost is that windows cut sentences mid-way. That is cosmetic for the
 embedding model, and only slightly ugly when printing a chunk on a slide.
 
-> **NEEDS DECISION (short-fragment handling).** Trailing stubs under `min_chunk_words`
-> are currently dropped. Merging them into the previous chunk instead would keep every
-> word at the cost of some length variance. Drop is the interim default because what it
-> discards is a handful of sentence tails. Worth a one-line answer in the viva either
-> way, since it explains the exact chunk count.
+### Measured output of stage 1
+
+Numbers from the frozen corpus at the revisions in `data/raw/MANIFEST.json`. Quote these
+rather than re-deriving them, and rerun the stage if any chunking knob changes.
+
+| Article | Raw words | Cleaned words | Chunks |
+| --- | --- | --- | --- |
+| Diabetes | 7,057 | 6,918 | 46 |
+| Type 1 diabetes | 8,970 | 8,842 | 59 |
+| Type 2 diabetes | 4,626 | 4,544 | 31 |
+| **Total** | **20,653** | **20,304** | **136** |
+
+134 of the 136 chunks are exactly 150 words. The two exceptions are the kept trailing
+windows, 142 words on Type 1 and 44 on Type 2.
+
+**136 chunks is a small corpus, and that has consequences worth flagging now.** A pool of
+15 at k=3 is 11 percent of the entire corpus, and a pool of 25 at k=5 is 18 percent. The
+lower end of a pool that size is genuinely weak material rather than a deep reserve of
+good alternatives, which makes the pool exhaustion case in METHOD.md section 5 a
+realistic event rather than a rare corner. Keep that in mind when that fallback gets
+decided.
+
+> **DECIDED (short-fragment handling): drop.** Trailing stubs under `min_chunk_words`
+> are discarded rather than merged into the previous chunk. This was left open until it
+> could be measured, and the measurement settles it: across the whole corpus the rule
+> discards **18 words**, the tail of the Diabetes article, out of 20,304. The other two
+> articles end with tails of 142 and 44 words, both above the 30 word floor, so both are
+> kept as slightly short chunks. Merging would recover 18 words at the cost of pushing a
+> chunk to 168 words and putting length variance into the similarity distribution the
+> global thresholds have to serve. Not worth it. The measured number is the viva answer.
 
 ## 3. Staged build order
 
@@ -178,9 +214,17 @@ These are a sketch to anchor the structure, not a contract. Where a signature to
 an open decision, the decision still has to be made first.
 
 ```python
+# config.py
+def load_config(path) -> dict: ...
+def require(config: dict, dotted_key: str):
+    """Fetch a config value, raising a named error if it is still null (undecided)."""
+
 # corpus.py
-def load_pages(raw_dir: str, strip_sections: list[str]) -> dict[str, str]:
-    """Read the frozen raw text, cut the noise sections. Returns {page_title: text}."""
+def load_pages(raw_dir, pages: list[str], strip_sections: list[str],
+               keep_headings: bool = True) -> dict[str, str]:
+    """Read the frozen raw text, cut the noise sections. Returns {page_title: text}.
+    Takes the page list from config rather than listing the directory, because this
+    dict's order fixes chunk id assignment and chunk id is the tie-break key."""
 def chunk_pages(pages, chunk_size_words, overlap_words, min_chunk_words) -> list[Chunk]:
     """Fixed-size word windows, never crossing a page boundary. Chunk carries
     id, text, source page, and word count."""
@@ -232,6 +276,11 @@ actually perform, since compute cost in EVALUATION.md is measured, not estimated
 Every value below is a knob. Several have interim defaults that are explicitly not
 final decisions, marked accordingly. Do not move any of these into inline constants.
 
+Undecided knobs are written as `null`, which parses to Python `None`. That is deliberate:
+`src/config.py` provides `require(config, "gate.tau")`, which raises a named error on a
+null rather than letting an unmade decision flow into a comparison. A placeholder string
+would compare without complaint and hide the fact that nobody chose the value.
+
 ```yaml
 model:
   name: "BAAI/bge-base-en-v1.5"
@@ -251,9 +300,12 @@ corpus:
     - "See also"
     - "Further reading"
     - "Notes"
+    - "Works cited"            # added after inspecting the fetched text
+  keep_headings: true          # NEEDS DECISION: keep heading words as body text (true)
+                               # or drop heading lines entirely (false)
   chunk_size_words: 150        # DECIDED: fixed-size windows
   overlap_words: 0             # DECIDED: no overlap, redundancy must be real
-  min_chunk_words: 30          # DECIDED: drop the trailing stub if shorter
+  min_chunk_words: 30          # DECIDED: drop the trailing stub, measured cost 18 words
 
 retrieval:
   k: 3                         # matches the worked example; real runs may use larger k
@@ -261,14 +313,14 @@ retrieval:
   tie_break: "chunk_id_asc"    # DECIDED: relevance desc, then chunk id asc, stable sort
 
 gate:
-  tau: <undecided>             # NEEDS DECISION: fixed vs percentile vs tuned (METHOD.md)
+  tau: null                    # NEEDS DECISION: fixed vs percentile vs tuned (METHOD.md)
   averaging: "mean"            # NEEDS DECISION: mean vs weighted (METHOD.md)
 
 repair:
-  delta: <undecided>           # NEEDS DECISION: fixed vs data-driven (METHOD.md)
-  multiway_rule: <undecided>   # NEEDS DECISION: how triangles are resolved (METHOD.md)
-  backfill_check: <undecided>  # NEEDS DECISION: pairwise-delta vs set-level-tau (METHOD.md)
-  exhaustion_fallback: <undecided>  # NEEDS DECISION: relax / ship fewer / bigger pool
+  delta: null                  # NEEDS DECISION: fixed vs data-driven (METHOD.md)
+  multiway_rule: null          # NEEDS DECISION: how triangles are resolved (METHOD.md)
+  backfill_check: null         # NEEDS DECISION: pairwise-delta vs set-level-tau (METHOD.md)
+  exhaustion_fallback: null    # NEEDS DECISION: relax / ship fewer / bigger pool
 
 mmr:
   lambda: 0.7                  # baseline knob, matches worked example
