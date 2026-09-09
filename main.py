@@ -1,20 +1,4 @@
-"""Run one query through all three methods and print what each returns.
-
-    uv run python main.py "what causes type 2 diabetes"
-    uv run python main.py "insulin treatment" --k 5
-
-Three methods, same query, same pool:
-
-  plain   the k most relevant chunks, no diversification. What standard RAG returns.
-  mmr     the established baseline. Diversifies on every query, always pays the cost.
-  gate    this project. Checks cheaply whether the top-k is redundant, and only repairs
-          it if it is. On the queries that are already diverse it returns the plain
-          top-k having spent just C(k,2) comparisons.
-
-The number to watch is `comparisons`, the count of similarity lookups each method spent.
-That is the contribution: on a non-redundant query the gate should cost far less than MMR
-while returning the same thing.
-"""
+"""Query three retrieval methods: plain top-k, MMR, and the redundancy gate."""
 
 import argparse
 import sys
@@ -105,15 +89,12 @@ def main() -> None:
           f"tau={tau}  delta={delta}")
     print("=" * 78)
 
-    # 1. Plain top-k. No chunk-to-chunk work at all.
     plain = plain_top_k(pool, k)
     show("PLAIN TOP-K (what standard RAG returns)", plain, chunks, relevance, 0)
 
-    # 2. MMR. Diversifies every query whether it needs it or not.
     mmr_ids, mmr_cost = mmr(pool, sim_matrix, k, config["mmr"]["lambda"])
     show("MMR BASELINE (always-on diversification)", mmr_ids, chunks, relevance, mmr_cost)
 
-    # 3. The gate method. Cheap check first, repair only if it trips.
     gate_result = run_gate(plain, sim_matrix, tau, config["gate"]["averaging"])
     print(f"\nGATE CHECK")
     print(f"  signal {gate_result.signal:.4f} vs tau {tau}  ->  "

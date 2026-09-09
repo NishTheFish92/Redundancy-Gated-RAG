@@ -1,100 +1,44 @@
-# config.yaml - every knob in the project lives here.
-#
-# Nothing in src/ hardcodes any of these values. Entries marked NEEDS DECISION are
-# open questions the team has not settled yet, and they are set to null on purpose so
-# that any code path relying on them fails loudly instead of quietly using a default
-# nobody agreed to. See docs/CHECKLIST.md for the current status of each one.
-
 model:
   name: "BAAI/bge-base-en-v1.5"
-  normalize: true              # DECIDED: L2 normalize, cosine becomes a dot product
-  query_prefix: true           # DECIDED: apply the BGE retrieval instruction
+  normalize: true
+  query_prefix: true
   query_prefix_text: "Represent this sentence for searching relevant passages: "
-  device: "cpu"                # DECIDED: CPU only. The corpus is 136 chunks so the GPU
-                               # saves nothing measurable, and CPU keeps similarities
-                               # byte-identical across all three of our machines, which
-                               # matters because tau is compared with a strict ">".
-  batch_size: 32               # encoding batch size, affects speed only, not results
-  cache_path: "data/cache/embeddings.npz"   # derived artifact, gitignored, rebuilt
-                               # automatically whenever the fingerprint stops matching
+  device: "cpu"
+  batch_size: 32
+  cache_path: "data/cache/embeddings.npz"
 
 corpus:
   raw_dir: "data/raw"
-  pages:                       # DECIDED: overlapping content, exercises the gate
+  pages:
     - "Diabetes"
     - "Type 1 diabetes"
     - "Type 2 diabetes"
-  strip_sections:              # DECIDED: cut before chunking, these are formatting noise
+  strip_sections:
     - "References"
     - "External links"
     - "See also"
     - "Further reading"
     - "Notes"
-    - "Works cited"            # added after inspecting the fetched text: this heading
-                               # exists on the Type 1 article with an empty body, so
-                               # without it the words "Works cited" survive as body text
-  keep_headings: true          # NEEDS DECISION: keep section heading words as ordinary
-                               # text inside a chunk (true), or drop heading lines
-                               # entirely (false). Interim default is true: the heading
-                               # words are real topic signal, and the "== ... ==" markup
-                               # around them is stripped either way.
-  chunk_size_words: 150        # DECIDED: fixed-size windows
-  overlap_words: 0             # DECIDED: no overlap, redundancy must be real
-  min_chunk_words: 30          # DECIDED: drop the trailing stub if shorter
-                               # NEEDS DECISION: drop vs merge into the previous chunk
+    - "Works cited"
+  keep_headings: true
+  chunk_size_words: 150
+  overlap_words: 0
+  min_chunk_words: 30
 
 retrieval:
-  k: 3                         # matches the worked example; real runs may use larger k
-  pool_multiplier: 5           # DECIDED: pool_size = k * pool_multiplier, so k=5 -> 25
-  tie_break: "chunk_id_asc"    # DECIDED: relevance desc, then chunk id asc, stable sort
+  k: 3
+  pool_multiplier: 5
+  tie_break: "chunk_id_asc"
 
 gate:
-  tau: 0.80                    # INTERIM, fixed for now. p70 of the measured signal
-                               # distribution, which lines the trigger rate up with the
-                               # 30.1% of top-3 sets that actually contain a pair above
-                               # delta. Two warnings: (1) measured with chunks standing in
-                               # for queries, so re-measure once the real query set exists,
-                               # and (2) THIS VALUE IS TIED TO k=3. Signals shrink as k
-                               # grows, so at k=5 this fires on almost nothing. Re-derive
-                               # tau whenever k changes.
-                               # NEEDS DECISION for the final version: how tau is set
-                               # dynamically per dataset rather than pinned here.
-  averaging: "mean"            # NEEDS DECISION: mean vs weighted (METHOD.md)
+  tau: 0.80
+  averaging: "mean"
 
 repair:
-  delta: 0.834                 # INTERIM, fixed for now. p99.5 of the 9,180 corpus pair
-                               # similarities. Chosen by inspection: pairs above 0.90 are
-                               # near-verbatim shared text between articles, while 0.816
-                               # (p99) wrongly caught adjacent continuation chunks such as
-                               # c0/c1 at 0.823. Flags 46 of 9,180 pairs.
-                               # NEEDS DECISION for the final version: how delta is set
-                               # dynamically per dataset rather than pinned here.
+  delta: 0.834
   multiway_rule: "iterative_worst_pair"
-                               # NEEDS DECISION, interim default. When 3+ chunks are all
-                               # mutually above delta, dropping every over-delta pair at
-                               # once over-prunes. This rule instead drops ONE chunk at a
-                               # time: find the single most similar over-delta pair, drop
-                               # its lower-relevance member, recheck, repeat. It is the
-                               # option METHOD.md section 5 sketches. Alternative not
-                               # implemented: drop all at once, which frees more slots.
-
   backfill_check: "pairwise_delta"
-                               # NEEDS DECISION, interim default. A candidate is rejected
-                               # if its similarity to ANY already-kept chunk exceeds delta.
-                               # Chosen because it is consistent with how dedup defines a
-                               # duplicate and is cheap. Alternative not implemented:
-                               # set_level_tau, reject if adding it pushes the set mean
-                               # back above tau, which is consistent with the gate instead.
-
   exhaustion_fallback: "relax"
-                               # NEEDS DECISION, interim default. If the reserve runs out
-                               # before the set is back to k, accept the least-similar
-                               # rejected candidates until k is reached. Chosen so all
-                               # three methods always return exactly k chunks, without
-                               # which ILS and relevance are not comparable across methods.
-                               # Honest alternative: "ship_fewer", which surfaces the
-                               # problem instead of papering over it but makes the metrics
-                               # compare sets of different sizes.
 
 mmr:
-  lambda: 0.7                  # baseline knob, matches worked example
+  lambda: 0.7
