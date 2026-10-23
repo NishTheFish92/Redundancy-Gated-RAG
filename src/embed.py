@@ -23,6 +23,9 @@ from pathlib import Path
 
 import numpy as np
 
+# DECIDED: the BGE retrieval instruction. Goes on queries only, never on passages.
+BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
 # Loading the model takes a few seconds, so keep one per (name, device) for the process.
 _MODEL_CACHE: dict[tuple[str, str], object] = {}
 
@@ -44,11 +47,11 @@ def load_model(model_name: str, device: str = "cpu"):
 def embed_texts(
     texts: list[str],
     model_name: str,
-    normalize: bool = True,
     batch_size: int = 32,
     device: str = "cpu",
 ) -> np.ndarray:
-    """Encode passages. No prefix is ever added here, that is queries only.
+    """Encode passages, always L2 normalized (DECIDED). No prefix is ever added here,
+    that is queries only.
 
     Returns shape (len(texts), 768), float32.
     """
@@ -56,27 +59,20 @@ def embed_texts(
     embeddings = model.encode(
         texts,
         batch_size=batch_size,
-        normalize_embeddings=normalize,   # the L2 normalization step
+        normalize_embeddings=True,   # the L2 normalization step
         convert_to_numpy=True,
         show_progress_bar=len(texts) > 100,
     )
     return embeddings.astype(np.float32)
 
 
-def embed_query(
-    query: str,
-    model_name: str,
-    prefix: str | None = None,
-    normalize: bool = True,
-    device: str = "cpu",
-) -> np.ndarray:
-    """Encode one query, applying the BGE instruction prefix if one is configured.
+def embed_query(query: str, model_name: str, device: str = "cpu") -> np.ndarray:
+    """Encode one query with the BGE instruction prefix in front of it.
 
     Returns shape (768,), float32. The prefix goes on the query and nowhere else, which
-    is the asymmetry bge-base expects. Passing prefix=None gives the no-prefix ablation.
+    is the asymmetry bge-base expects.
     """
-    text = f"{prefix}{query}" if prefix else query
-    return embed_texts([text], model_name, normalize, 1, device)[0]
+    return embed_texts([BGE_QUERY_PREFIX + query], model_name, 1, device)[0]
 
 
 def check_unit_norms(embeddings: np.ndarray, tol: float = 1e-4) -> None:
@@ -93,7 +89,7 @@ def check_unit_norms(embeddings: np.ndarray, tol: float = 1e-4) -> None:
         raise ValueError(
             f"embeddings are not L2 normalized: largest deviation from length 1 is "
             f"{worst:.6f}. Cosine similarity is not a dot product here, so S would be "
-            f"wrong. Check model.normalize in config.yaml."
+            f"wrong. Check the normalize step in embed_texts."
         )
 
 
@@ -108,7 +104,7 @@ def similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
     return embeddings @ embeddings.T
 
 
-def fingerprint(chunk_texts: list[str], model_name: str, normalize: bool) -> str:
+def fingerprint(chunk_texts: list[str], model_name: str) -> str:
     """A hash of everything that determines the embeddings.
 
     Hashing the chunk texts themselves rather than the config knobs that produced them
@@ -117,7 +113,6 @@ def fingerprint(chunk_texts: list[str], model_name: str, normalize: bool) -> str
     """
     h = hashlib.sha256()
     h.update(model_name.encode("utf-8"))
-    h.update(b"|normalize=" + str(bool(normalize)).encode("utf-8"))
     for text in chunk_texts:
         h.update(b"|")
         h.update(text.encode("utf-8"))
@@ -128,7 +123,6 @@ def build_or_load_embeddings(
     chunk_texts: list[str],
     model_name: str,
     cache_path: str | Path,
-    normalize: bool = True,
     batch_size: int = 32,
     device: str = "cpu",
     verbose: bool = True,
@@ -139,7 +133,7 @@ def build_or_load_embeddings(
     something anyone has to remember to clear.
     """
     cache_path = Path(cache_path)
-    expected = fingerprint(chunk_texts, model_name, normalize)
+    expected = fingerprint(chunk_texts, model_name)
 
     if cache_path.exists():
         cached = np.load(cache_path, allow_pickle=False)
@@ -152,7 +146,7 @@ def build_or_load_embeddings(
 
     if verbose:
         print(f"embeddings: encoding {len(chunk_texts)} chunks with {model_name}")
-    embeddings = embed_texts(chunk_texts, model_name, normalize, batch_size, device)
+    embeddings = embed_texts(chunk_texts, model_name, batch_size, device)
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(cache_path, embeddings=embeddings, fingerprint=np.array(expected))

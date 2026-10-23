@@ -8,9 +8,10 @@ Two parts, in order (METHOD.md section 5):
   Backfill. Walk the reserve in relevance order and take the first candidates that are
             not too similar to what is already kept, until the set is back to k.
 
-Three of the rules here are still open decisions. Each is wired to a config knob with a
-labelled interim default, and each raises rather than silently guessing if it is set to a
-value that has not been implemented. See config.yaml for the tradeoffs.
+The rules for multi-way redundancy, the backfill check, and pool exhaustion are all
+DECIDED, see METHOD.md section 5. The backfill check and the exhaustion fallback stay as
+config knobs so the unimplemented alternatives listed in config.yaml can be tried during
+evaluation. Asking for one of those raises rather than silently running the default.
 """
 
 import itertools
@@ -49,23 +50,15 @@ def dedup(
     sim_matrix: np.ndarray,
     relevance: dict[int, float],
     delta: float,
-    multiway_rule: str = "iterative_worst_pair",
 ) -> tuple[list[int], list[int], int]:
     """Drop redundant members of the top-k. Returns (kept, dropped, comparisons).
 
-    With `iterative_worst_pair`, exactly one chunk is dropped per round: take the single
+    Exactly one chunk is dropped per round (DECIDED, METHOD.md section 5): take the single
     most similar over-delta pair, drop its lower-relevance member, then recheck the whole
     set. This matters when three or more chunks are mutually similar. Dropping every
     over-delta pair in one pass would remove several chunks at once and over-prune,
     because dropping one member often resolves several pairs at the same time.
     """
-    if multiway_rule != "iterative_worst_pair":
-        raise NotImplementedError(
-            f"multiway_rule '{multiway_rule}' is not implemented. Only "
-            f"'iterative_worst_pair' exists. See METHOD.md section 5, this is an open "
-            f"decision."
-        )
-
     kept = list(topk_ids)
     dropped: list[int] = []
     comparisons = 0
@@ -116,8 +109,8 @@ def backfill(
     if backfill_check != "pairwise_delta":
         raise NotImplementedError(
             f"backfill_check '{backfill_check}' is not implemented. Only "
-            f"'pairwise_delta' exists. The set-level alternative is an open decision, "
-            f"see METHOD.md section 5."
+            f"'pairwise_delta' exists, which is the DECIDED rule. See METHOD.md "
+            f"section 5."
         )
 
     added: list[int] = []
@@ -142,7 +135,7 @@ def backfill(
         if exhaustion_fallback != "relax":
             raise NotImplementedError(
                 f"exhaustion_fallback '{exhaustion_fallback}' is not implemented. Only "
-                f"'relax' exists. See METHOD.md section 5, this is an open decision."
+                f"'relax' exists, which is the DECIDED rule. See METHOD.md section 5."
             )
         # Relax: take back the least-similar rejected candidates until the set is full,
         # so all three methods return exactly k chunks and their metrics stay comparable.
@@ -169,14 +162,11 @@ def repair(
     relevance: dict[int, float],
     delta: float,
     k: int,
-    multiway_rule: str = "iterative_worst_pair",
     backfill_check: str = "pairwise_delta",
     exhaustion_fallback: str = "relax",
 ) -> RepairResult:
     """Dedup then backfill. Returns the final k chunk ids and everything that happened."""
-    kept, dropped, dedup_cost = dedup(
-        topk_ids, sim_matrix, relevance, delta, multiway_rule
-    )
+    kept, dropped, dedup_cost = dedup(topk_ids, sim_matrix, relevance, delta)
     kept, added, rejected, relaxed, backfill_cost = backfill(
         kept, reserve_pool, sim_matrix, delta, k, backfill_check, exhaustion_fallback
     )

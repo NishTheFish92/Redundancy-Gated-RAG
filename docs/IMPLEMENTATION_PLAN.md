@@ -30,8 +30,8 @@ first and the low-risk writeup work is left for the end.
 > **Query prefix: on.** Retrieval queries carry the BGE instruction prefix,
 > "Represent this sentence for searching relevant passages: ". Passages get no prefix.
 > This is documented model usage and a reviewer familiar with BGE will ask about it.
-> The prefix text itself is a config value so the no-prefix ablation stays one edit
-> away.
+> The prefix text is the constant `BGE_QUERY_PREFIX` in `src/embed.py`, not a config
+> value, because it is decided and belongs to the model.
 >
 > Note for later: BGE has a high similarity floor. Unrelated English text often scores
 > around 0.6 to 0.7 rather than near 0. Expect this, measure the actual distribution
@@ -102,6 +102,12 @@ match each other at very high similarity across articles. Those are real duplica
 pairs but completely uninteresting ones, and they would inflate the duplicate-rate
 metric with an artifact a viva panel would enjoy finding. Fixed windows absorb headings
 mid-chunk instead.
+
+**DECIDED (section headings): keep them as body text.** A heading line such as
+"== Causes ==" is kept as the plain word "Causes" inside whatever chunk it falls in, and
+only the markup is stripped. The heading words are real topic signal for retrieval, and
+fixed windows already stop them from becoming their own tiny chunks. Config knob
+`corpus.keep_headings: true`.
 
 The accepted cost is that windows cut sentences mid-way. That is cosmetic for the
 embedding model, and only slightly ugly when printing a chunk on a slide.
@@ -230,7 +236,7 @@ def chunk_pages(pages, chunk_size_words, overlap_words, min_chunk_words) -> list
     id, text, source page, and word count."""
 
 # embed.py
-def embed_texts(texts: list[str], normalize: bool = True) -> np.ndarray: ...
+def embed_texts(texts: list[str]) -> np.ndarray: ...   # always L2 normalized
 def embed_query(query: str, prefix: str | None) -> np.ndarray:
     """Applies the BGE instruction prefix to the query only. Passages get none."""
 def similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
@@ -245,14 +251,14 @@ def plain_top_k(pool: list[tuple[int, float]], k: int) -> list[int]: ...
 # gate.py
 def gate_signal(topk_ids: list[int], sim_matrix: np.ndarray) -> float:
     """Mean pairwise chunk-to-chunk similarity within top-k.
-    NEEDS DECISION: simple mean vs weighted (see METHOD.md section 4)."""
+    DECIDED: simple mean (see METHOD.md section 4)."""
 def gate_trips(signal: float, tau: float) -> bool: ...
 
 # repair.py
 def repair(topk_ids, pool, sim_matrix, relevance, delta, k) -> list[int]:
     """Dedup then backfill. Returns final k chunk ids.
-    NEEDS DECISION: multi-way redundancy rule, backfill acceptance check,
-    pool-exhaustion fallback (all in METHOD.md section 5)."""
+    DECIDED: iterative worst-pair dedup, pairwise-delta backfill check,
+    relax on pool exhaustion (all in METHOD.md section 5)."""
 
 # mmr.py
 def mmr(pool, query_relevance, sim_matrix, k, lambda_: float) -> list[int]: ...
@@ -284,9 +290,6 @@ would compare without complaint and hide the fact that nobody chose the value.
 ```yaml
 model:
   name: "BAAI/bge-base-en-v1.5"
-  normalize: true              # DECIDED: L2 normalize, cosine becomes a dot product
-  query_prefix: true           # DECIDED: apply the BGE retrieval instruction
-  query_prefix_text: "Represent this sentence for searching relevant passages: "
 
 corpus:
   raw_dir: "data/raw"
@@ -301,8 +304,7 @@ corpus:
     - "Further reading"
     - "Notes"
     - "Works cited"            # added after inspecting the fetched text
-  keep_headings: true          # NEEDS DECISION: keep heading words as body text (true)
-                               # or drop heading lines entirely (false)
+  keep_headings: true          # DECIDED: keep heading words as body text
   chunk_size_words: 150        # DECIDED: fixed-size windows
   overlap_words: 0             # DECIDED: no overlap, redundancy must be real
   min_chunk_words: 30          # DECIDED: drop the trailing stub, measured cost 18 words
@@ -310,17 +312,14 @@ corpus:
 retrieval:
   k: 3                         # matches the worked example; real runs may use larger k
   pool_multiplier: 5           # DECIDED: pool_size = k * pool_multiplier, so k=5 -> 25
-  tie_break: "chunk_id_asc"    # DECIDED: relevance desc, then chunk id asc, stable sort
 
 gate:
   tau: null                    # NEEDS DECISION: fixed vs percentile vs tuned (METHOD.md)
-  averaging: "mean"            # NEEDS DECISION: mean vs weighted (METHOD.md)
 
 repair:
   delta: null                  # NEEDS DECISION: fixed vs data-driven (METHOD.md)
-  multiway_rule: null          # NEEDS DECISION: how triangles are resolved (METHOD.md)
-  backfill_check: null         # NEEDS DECISION: pairwise-delta vs set-level-tau (METHOD.md)
-  exhaustion_fallback: null    # NEEDS DECISION: relax / ship fewer / bigger pool
+  backfill_check: "pairwise_delta"   # DECIDED (METHOD.md)
+  exhaustion_fallback: "relax"       # DECIDED (METHOD.md)
 
 mmr:
   lambda: 0.7                  # baseline knob, matches worked example

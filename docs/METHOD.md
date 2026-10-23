@@ -72,13 +72,13 @@ The gate cost is fixed at C(k,2) similarity lookups per query, whether or not it
 trips. This fixed, tiny cost is the whole efficiency argument, so it must be counted
 honestly in evaluation (see EVALUATION.md).
 
-> **NEEDS DECISION (gate averaging).** The signal is currently defined as a simple
-> mean of the pairwise similarities. A weighted average may be better, for example
-> weighting each pair by the relevance of its members so that redundancy among the
-> most-relevant chunks counts for more than redundancy among borderline ones. Simple
-> mean is the interim default. Do not switch to a weighted scheme without raising it,
-> and if you do implement a weighted option, keep the simple mean available behind the
-> same config knob so the two can be compared.
+> **DECIDED (gate averaging): simple mean.** A relevance-weighted mean was considered,
+> where each pair counts more when its members are more relevant, so redundancy at the
+> top of the list matters most. It was rejected for two reasons. First, BGE relevances
+> inside a top-k sit very close together (for example 0.78, 0.76, 0.75), so the weights
+> come out nearly equal and the weighted signal is almost the same number as the mean.
+> Second, it brings its own extra decision (which weight formula) and is harder to
+> explain, for almost no effect. The `averaging` knob was removed from config.
 
 > **DECIDED for now (how tau is set): a fixed value of 0.80, pinned in config.** How to
 > choose it dynamically per dataset is deferred to the 100 percent version and stays open.
@@ -129,7 +129,7 @@ take the first candidates that clear the bar, rechecking each new addition again
 set already built. That iterative rechecking is deliberate and is what keeps the
 backfill from reintroducing redundancy.
 
-The following details are genuinely open. Do not assume any of them.
+The details below were open and are now settled, each with its reasoning.
 
 > **DECIDED for now (delta setting): a fixed value of 0.834, pinned in config.** How to
 > choose it dynamically per dataset is deferred to the 100 percent version and stays open.
@@ -149,29 +149,50 @@ The following details are genuinely open. Do not assume any of them.
 > redundant" line) remain two independent knobs doing two different jobs. Keep them
 > separate in config.
 
-> **NEEDS DECISION (multi-way redundancy).** The plain rule "drop the lower-relevance
-> member of each over-delta pair" only behaves well for isolated pairs. When three or
-> more chunks are all mutually similar (for example all three of the top-3 exceed
-> delta with each other), applying the rule pair by pair can try to drop several
-> chunks at once and over-prune. A rule that generalizes is needed, for example:
-> repeatedly find the single most-similar over-delta pair, drop its lower-relevance
-> member, recheck, and repeat until no pair exceeds delta. This changes how many slots
-> get freed and must be decided explicitly, not improvised in code.
+> **DECIDED (multi-way redundancy): iterative worst pair.** When three or more chunks
+> are mutually similar, repair drops one chunk at a time: find the single most similar
+> pair above `delta`, drop its lower-relevance member, recheck the remaining set, and
+> repeat until no pair exceeds `delta`. The alternative, dropping the lower member of
+> every over-delta pair in one pass, over-prunes. Example: A-B 0.95, B-C 0.90, A-C 0.70.
+> One pass drops B and C and keeps only {A}, even though C was never similar to A. The
+> iterative rule drops B, rechecks, finds A-C fine, and keeps {A, C}. This is now simply
+> how dedup works, so it is not a config knob.
 
-> **NEEDS DECISION (backfill acceptance check).** It is not fixed what a backfill
-> candidate is checked against. Two reasonable options: (a) reject the candidate if
-> its similarity to any already-kept chunk exceeds `delta` (a pairwise duplicate
-> check), or (b) reject it if adding it would push the whole set's mean similarity back
-> above `tau` (a set-level check consistent with the gate). These can give different
-> final sets. Pick one deliberately and document why.
+> **DECIDED (backfill acceptance check): pairwise against `delta`.** A candidate is
+> rejected if its similarity to any already-kept chunk exceeds `delta`. Reasons: dedup
+> and backfill then share one definition of "duplicate"; no pair above `delta` survives
+> repair (except through the exhaustion fallback below); a true near-duplicate cannot
+> sneak in by being averaged against diverse chunks; and it does not depend on `tau`,
+> which is the least settled knob and is tied to k. The rejected alternative,
+> `set_level_tau`, rejects a candidate only if adding it pushes the set mean above
+> `tau`. It is consistent with the gate, but it can readmit a real duplicate. Example:
+> kept {A, C} with A-C 0.70, candidate D with D-A 0.86 and D-C 0.60. The mean is 0.72,
+> so set_level_tau accepts D even though it duplicates A. The knob stays in config with
+> `set_level_tau` listed as an unimplemented alternative.
 
-> **NEEDS DECISION (pool exhaustion fallback).** With a small reserve it is possible to
-> drop members, fail to find enough clean replacements, and end up with fewer than k
-> chunks and an empty reserve. This is most likely exactly when the query was most
-> redundant, so it is not a rare corner to ignore. Options include: relax `delta` and
-> accept the least-similar remaining candidate, ship fewer than k, or retrieve a
-> larger pool up front. Decide this, and see the pool-sizing note in
-> IMPLEMENTATION_PLAN.md.
+> **DECIDED (pool exhaustion fallback): relax.** If the reserve runs out before the set
+> is back to k, take back the rejected candidate least similar to the kept set, and
+> repeat until there are k chunks. This keeps every method returning exactly k chunks,
+> so ILS, relevance and cost compare fairly across plain, MMR and gate. The accepted
+> cost is that the "no pair above `delta`" guarantee breaks for that query, which is
+> acceptable because a certain amount of redundancy can reinforce facts. It is also
+> expected to be rare at k=3: `delta` flags only 46 of 9,180 corpus pairs, so the whole
+> reserve would have to be duplicates of a kept chunk. Alternatives considered and left
+> unimplemented for now, to be revisited during evaluation if relax turns out to matter:
+> `ship_fewer` (return fewer than k), `mmr_pick` (pick the reject with the best MMR
+> score), `relevance_floor` (least similar, but only among rejects close in relevance
+> to the top chunk), and `delta_ladder` (raise `delta` a fixed number of times and take
+> the most relevant reject that passes, then fall back to relax).
+
+> **DECIDED (gate and repair use different tests).** The gate trips on the set mean
+> against `tau`, while dedup acts on single pairs against `delta`. These do not always
+> agree. A set with every pair at 0.81 trips the gate (mean above 0.80) but has no pair
+> above 0.834, so repair changes nothing and the 3 gate comparisons buy nothing. A set
+> with one pair at 0.90 and two at 0.65 has a mean of 0.73, does not trip, and ships
+> its duplicate. This is accepted, not fixed: a certain amount of redundancy can
+> reinforce context and facts rather than waste it. The real risk is too much
+> redundancy getting through, for example if `tau` were set so high that the gate
+> almost never trips, and that is handled when `tau` and `delta` are set.
 
 > **DECIDED (similarity space).** All embeddings are L2-normalized at encode time, so
 > cosine similarity is a plain dot product. Queries and passages are normalized
@@ -231,8 +252,9 @@ the sensitivity sweep in EVALUATION.md is for.
 
 ## 8. Known edge cases to handle (not to gloss over)
 
-- **Full redundancy triangle at small k.** See the multi-way redundancy decision above.
-- **Pool exhaustion during backfill.** See the fallback decision above.
+- **Full redundancy triangle at small k.** DECIDED, see the multi-way redundancy note
+  in section 5.
+- **Pool exhaustion during backfill.** DECIDED, see the fallback note in section 5.
 - **Gate never fires on a too-diverse corpus.** Not a bug in the method, but it makes
   results look flat. Handled at the dataset level, see IMPLEMENTATION_PLAN.md.
 - **Ties in relevance ordering.** DECIDED: sort by relevance descending, break ties by

@@ -105,7 +105,7 @@ Worked example, top-3 is {A, B, C} with A-B 0.85, A-C 0.30, B-C 0.35:
 signal = (0.85 + 0.30 + 0.35) / 3 = 0.50
 ```
 
-NEEDS DECISION: simple mean (above) versus a relevance-weighted mean.
+DECIDED: simple mean. See METHOD.md section 4.
 
 ## 7. Gate trip test
 
@@ -127,8 +127,9 @@ S[i][j] > delta
 Drop the lower-relevance member of the pair. Worked example: A-B is 0.85 which is above
 delta 0.8, and B has lower relevance than A, so B is dropped.
 
-NEEDS DECISION: how three or more mutually similar chunks are resolved, and what a
-backfill candidate is tested against.
+DECIDED: when three or more chunks are mutually similar, drop one chunk at a time
+(the worst pair first, then recheck). A backfill candidate is rejected if `S[c][p] >
+delta` for any kept chunk `p`. See METHOD.md section 5.
 
 ## 9. MMR score (baseline)
 

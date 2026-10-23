@@ -48,7 +48,6 @@ def build_index(config):
         [chunk.text for chunk in chunks],
         model_cfg["name"],
         resolve_path(model_cfg["cache_path"]),
-        model_cfg["normalize"],
         model_cfg["batch_size"],
         model_cfg["device"],
         verbose=False,
@@ -91,10 +90,7 @@ def main() -> None:
 
     chunks, embeddings, sim_matrix = build_index(config)
 
-    prefix = model_cfg["query_prefix_text"] if model_cfg["query_prefix"] else None
-    query_emb = embed_query(
-        args.query, model_cfg["name"], prefix, model_cfg["normalize"], model_cfg["device"]
-    )
+    query_emb = embed_query(args.query, model_cfg["name"], model_cfg["device"])
 
     pool = retrieve_pool(query_emb, embeddings, pool_size)
     relevance = {chunk_id: score for chunk_id, score in pool}
@@ -114,7 +110,7 @@ def main() -> None:
     show("MMR BASELINE (always-on diversification)", mmr_ids, chunks, relevance, mmr_cost)
 
     # 3. The gate method. Cheap check first, repair only if it trips.
-    gate_result = run_gate(plain, sim_matrix, tau, config["gate"]["averaging"])
+    gate_result = run_gate(plain, sim_matrix, tau)
     print(f"\nGATE CHECK")
     print(f"  signal {gate_result.signal:.4f} vs tau {tau}  ->  "
           f"{'TRIPPED, repairing' if gate_result.trips else 'clean, shipping plain top-k'}")
@@ -130,7 +126,6 @@ def main() -> None:
             relevance,
             delta,
             k,
-            repair_cfg["multiway_rule"],
             repair_cfg["backfill_check"],
             repair_cfg["exhaustion_fallback"],
         )

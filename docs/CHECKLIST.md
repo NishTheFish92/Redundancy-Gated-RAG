@@ -6,12 +6,15 @@ the detail belongs in the other three docs.
 ## Build stages
 
 - [x] 1. Corpus prep and chunking   <-- 136 chunks, see IMPLEMENTATION_PLAN.md sec 2
-- [ ] 2. Embedding and similarity matrix
-- [ ] 3. Plain top-k retrieval
-- [ ] 4. MMR baseline
-- [ ] 5. Gate (signal plus trip decision)
-- [ ] 6. Repair (dedup plus backfill)
-- [ ] 7. Evaluation harness          <-- stages 1 to 7 are the 70 percent milestone
+- [x] 2. Embedding and similarity matrix   <-- src/embed.py, cached to data/cache
+- [x] 3. Plain top-k retrieval             <-- src/retrieve.py
+- [x] 4. MMR baseline                      <-- src/mmr.py
+- [x] 5. Gate (signal plus trip decision)  <-- src/gate.py, tests/test_gate.py
+- [x] 6. Repair (dedup plus backfill)      <-- src/repair.py, no tests yet
+      Stages 2 to 6 are wired together in main.py, which runs ONE query through all
+      three methods.
+- [ ] 7. Evaluation harness          <-- stages 1 to 7 are the 70 percent milestone.
+                                         Blocked on the query set decision.
 - [ ] 8. Full experiment run
 - [ ] 9. Analysis, tables, tau sweep
 - [ ] 10. Writeup and slides
@@ -30,6 +33,14 @@ the detail belongs in the other three docs.
 - Tie-break: relevance desc, then chunk id asc, stable sort
 - k = 3 and tunable, pool_size = 5k
 - MMR lambda = 0.7
+- Section headings: kept as body text, markup stripped
+- Gate averaging: simple mean. Weighted barely differs on BGE scores, knob removed
+- Multi-way redundancy: iterative worst pair (drop one chunk, recheck). Knob removed
+- Backfill check: `pairwise_delta`. Unimplemented alternative: `set_level_tau`
+- Pool exhaustion: `relax` (least-similar reject). Unimplemented alternatives:
+  `ship_fewer`, `mmr_pick`, `relevance_floor`, `delta_ladder`. Expected rare at k=3
+- Gate/repair mismatch (mean vs tau, pairs vs delta): accepted. Some redundancy can
+  reinforce facts; the risk of too much is handled by how tau and delta are set
 - `delta` = 0.834 INTERIM, p99.5 of corpus pairs, checked by reading pairs at the boundary
 - `tau` = 0.80 INTERIM, p70 of measured signals, matches the 30.1% of top-3 sets that
   really do contain a pair above delta. TIED TO k=3, re-derive if k changes.
@@ -38,12 +49,7 @@ the detail belongs in the other three docs.
 
 - `tau` and `delta` for the FINAL version: how they are chosen dynamically per dataset.
   Both are pinned to fixed interim values for now (see Settled).
-- Gate averaging: simple mean vs relevance-weighted
-- Multi-way redundancy: how three mutually similar chunks get resolved
-- Backfill acceptance check: pairwise delta vs set-level tau
-- Pool exhaustion fallback
 - Query set: how many queries, and how they are generated
-- Section headings: keep the heading words as body text (current default) vs drop them
 
 ## Gotchas to remember
 

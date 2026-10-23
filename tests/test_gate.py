@@ -84,12 +84,8 @@ class TestBoundary:
         assert gate_trips(0.8001, 0.80) is True
 
 
-class TestRefusesToGuess:
-    """Undecided options must fail loudly rather than silently pick something."""
-
-    def test_weighted_averaging_is_not_silently_the_mean(self, sim_matrix, plain_top3):
-        with pytest.raises(NotImplementedError):
-            gate_signal(plain_top3, sim_matrix, averaging="weighted")
+class TestFailsLoudly:
+    """Bad input must raise rather than silently produce a number."""
 
     def test_a_set_with_no_pairs_errors(self, sim_matrix):
         with pytest.raises(ValueError):

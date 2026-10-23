@@ -58,39 +58,28 @@ def pairwise_similarities(
     return pairs, comparisons
 
 
-def signal_from_pairs(
-    pairs: list[tuple[int, int, float]], averaging: str = "mean"
-) -> float:
-    """Reduce already-looked-up pairs to the single gate signal.
+def signal_from_pairs(pairs: list[tuple[int, int, float]]) -> float:
+    """Reduce already-looked-up pairs to the single gate signal: their simple mean.
 
     Kept separate from the lookups on purpose. Every similarity in this project must be
     counted exactly once, so the code that reads the matrix and the code that averages
     the result are different functions, and nothing can quietly look a pair up twice.
+
+    Simple mean is DECIDED (METHOD.md section 4). A relevance-weighted mean was
+    considered and rejected: BGE relevances inside a top-k sit very close together, so
+    the weights come out nearly equal and the result barely differs from the mean.
     """
-    if averaging == "mean":
-        return float(np.mean([sim for _, _, sim in pairs]))
-    else:
-        # NEEDS DECISION: METHOD.md section 4 leaves open whether pairs should be
-        # weighted by the relevance of their members, so redundancy among the most
-        # relevant chunks counts for more. Not implemented, and deliberately not
-        # silently falling back to the mean, because that would hide the fact that
-        # config asked for something the code does not do.
-        raise NotImplementedError(
-            f"gate averaging '{averaging}' is not implemented. Only 'mean' exists. "
-            f"The weighted variant is an open decision, see METHOD.md section 4."
-        )
+    return float(np.mean([sim for _, _, sim in pairs]))
 
 
-def gate_signal(
-    topk_ids: list[int], sim_matrix: np.ndarray, averaging: str = "mean"
-) -> tuple[float, int]:
+def gate_signal(topk_ids: list[int], sim_matrix: np.ndarray) -> tuple[float, int]:
     """The gate signal: how redundant the current top-k is, as one number.
 
-    Returns (signal, comparisons). With `averaging="mean"` this is the plain mean of the
-    C(k,2) pairwise similarities, which is what METHOD.md section 4 specifies.
+    Returns (signal, comparisons). The signal is the plain mean of the C(k,2) pairwise
+    similarities, which is what METHOD.md section 4 specifies.
     """
     pairs, comparisons = pairwise_similarities(topk_ids, sim_matrix)
-    return signal_from_pairs(pairs, averaging), comparisons
+    return signal_from_pairs(pairs), comparisons
 
 
 def gate_trips(signal: float, tau: float) -> bool:
@@ -106,7 +95,6 @@ def run_gate(
     topk_ids: list[int],
     sim_matrix: np.ndarray,
     tau: float,
-    averaging: str = "mean",
 ) -> GateResult:
     """Do the whole gate check in one call and report everything about it.
 
@@ -115,7 +103,7 @@ def run_gate(
     query, including the ones that ship the plain top-k untouched.
     """
     pairs, comparisons = pairwise_similarities(topk_ids, sim_matrix)
-    signal = signal_from_pairs(pairs, averaging)
+    signal = signal_from_pairs(pairs)
     return GateResult(
         signal=signal,
         trips=gate_trips(signal, tau),
