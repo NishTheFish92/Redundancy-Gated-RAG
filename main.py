@@ -84,7 +84,8 @@ def main() -> None:
         print(
             f"WARNING: k overridden to {args.k}, but tau={tau} was calibrated for "
             f"k={config['retrieval']['k']}. Gate signals shrink as k grows, so the "
-            f"trigger rate here is not meaningful. See config.yaml.\n",
+            f"trigger rate here is not meaningful. Rerun scripts/calibrate.py with "
+            f"the new k for a matching tau.\n",
             file=sys.stderr,
         )
 

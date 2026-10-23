@@ -57,8 +57,8 @@ def clean_text(text: str, strip_sections: list[str], keep_headings: bool = True)
     kept as "Causes"). The words are genuine topic signal and fixed-size windows absorb
     them mid-chunk, which is the point: a splitter that respected line structure could
     emit "Causes" as its own tiny chunk, and those match across all three articles at
-    very high similarity, inflating the duplicate rate with a real but uninteresting
-    artifact.
+    very high similarity, inflating the count of duplicate pairs with a real but
+    uninteresting artifact.
     """
     strip_lower = {s.lower() for s in strip_sections}
     kept_lines: list[str] = []

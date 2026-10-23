@@ -80,35 +80,48 @@ honestly in evaluation (see EVALUATION.md).
 > Second, it brings its own extra decision (which weight formula) and is harder to
 > explain, for almost no effect. The `averaging` knob was removed from config.
 
-> **DECIDED for now (how tau is set): a fixed value of 0.80, pinned in config.** How to
-> choose it dynamically per dataset is deferred to the 100 percent version and stays open.
+> **DECIDED (how tau is set): derived from `delta` and `k` by a formula.** The rule in
+> words: **trip when the set is at least as redundant as one duplicate pair sitting in an
+> otherwise normal top-k.**
 >
-> How 0.80 was arrived at, since "we picked a number" is not a viva answer. The gate
-> signal was measured over 136 pseudo-queries, using each chunk as a stand-in query and
-> taking its top-3. Signals ran 0.691 to 0.868 with a mean of 0.785, which sits about
-> 0.10 above the corpus-wide pair mean of 0.684. That lift is expected: the top-k are all
-> relevant to the same query, so they are more alike than random chunk pairs. It also
-> rules out anchoring tau to the corpus distribution, which would trip on nearly every
-> query.
+>     tau = (delta + (C(k,2) - 1) * b) / C(k,2)
 >
-> The anchor used instead is independent of tau: **30.1 percent of top-3 sets contain a
-> pair above `delta`**, meaning they hold a genuine near-duplicate. The gate is a cheap
-> proxy for exactly that condition, so tau is set where the trigger rate matches it.
-> p70 of the signal distribution is 0.801, giving a 30.1 percent trigger rate. Rounded to
-> 0.80.
+> `b` is the typical similarity of two chunks that share a top-k without being
+> duplicates. It is measured on pseudo-queries: each of the 136 chunks stands in as a
+> query, its top-k is taken from the other 135 chunks (the chunk itself is excluded, or
+> it would always be its own top-1), and `b` is the median of all the pair similarities
+> in those top-k sets that are at or below `delta`. Code: `src/calibrate.py`, run by
+> `scripts/calibrate.py`.
 >
-> This deliberately avoids a circular choice. Setting tau to a percentile picked for a
-> nice-looking trigger rate would make the headline metric a restatement of the choice
-> rather than a finding. Deriving it from `delta` keeps it honest.
+> Current values, k = 3: `b` = 0.782, so tau = (0.856 + 2 * 0.782) / 3 = **0.807**. At
+> k = 5 the same rule gives `b` = 0.772 and tau = 0.780.
 >
-> **Two warnings.** The measurement used chunks as stand-in queries, so re-measure once
-> the real query set exists. And tau is coupled to `k`: more pairs dilute the mean, so at
-> k=5 the same distribution has p70 at 0.785 while duplicate presence rises to 53.7
-> percent. A tau of 0.80 at k=5 would fire on almost nothing. Re-derive tau whenever k
-> changes.
+> Why this rule:
+> - **It handles k.** More pairs dilute the mean, so a fixed tau that suits k = 3 fires
+>   on almost nothing at k = 5. The formula re-derives itself for any k.
+> - **It handles BGE's high floor.** `b` is measured, so tau sits just above what a
+>   normal top-k looks like on this corpus, whatever that level is.
+> - **It is not circular.** tau is never picked to produce a particular trigger rate,
+>   so the trigger rate stays a finding rather than a restatement of the choice.
 >
-> EVALUATION.md's sensitivity sweep over `tau` still applies and is the primary defence
-> against any single value being wrong.
+> For information only: on the 136 pseudo-queries at k = 3 the gate trips on 24.3
+> percent, while 18.4 percent of the top-3 sets contain a pair above `delta`. The two
+> do not have to match, see the gate and repair note in section 5.
+>
+> History. The interim value was 0.80, set at p70 of the measured signal so the trigger
+> rate matched the share of top-3 sets holding a pair above the old `delta` of 0.834.
+> It was replaced because it was tied to k = 3 and had to be re-derived by hand.
+>
+> **DECIDED (how `b` is measured).** The median rather than the mean, so a few unusual
+> pairs cannot drag it. Pairs above `delta` are left out, since `b` describes a normal,
+> duplicate-free pair. And each chunk is excluded from its own top-k, or it would always
+> be its own top-1.
+>
+> **Caveat.** `b` comes from chunks standing in as queries. Once the real query set
+> exists, `b` could be re-measured on it, but only on a calibration split, never on the
+> queries the results are reported on.
+>
+> EVALUATION.md's sensitivity sweep over `tau` still applies.
 
 ## 5. The repair
 
@@ -131,23 +144,77 @@ backfill from reintroducing redundancy.
 
 The details below were open and are now settled, each with its reasoning.
 
-> **DECIDED for now (delta setting): a fixed value of 0.834, pinned in config.** How to
-> choose it dynamically per dataset is deferred to the 100 percent version and stays open.
+> **DECIDED (how delta is set): the 75 percent shared-sentence rule.** The definition:
+> **two chunks are duplicates if they share about 75 percent of their content.** Real
+> redundancy in RAG is rarely a perfect copy. It is mostly the same facts restated, as
+> when the Diabetes and Type 2 articles both explain insulin resistance. `delta` is set
+> to catch that, not only verbatim copies. The exact rule, in `src/calibrate.py`:
 >
-> 0.834 is p99.5 of the 9,180 corpus chunk-pair similarities, and it was checked by
-> reading pairs at each level rather than taken on faith. Pairs above 0.90 are genuine
-> near-verbatim duplicates: the top pair at 0.934 shares whole sentences between the
-> Diabetes and Type 2 articles. Pairs near 0.78 are merely on the same subject and share
-> vocabulary, nothing more. The deciding case was p99 (0.816), which would have flagged
-> c0 and c1 at 0.823, and those are **adjacent continuation chunks of the same article**,
-> complementary rather than duplicate. 0.834 excludes them. It flags 46 pairs of 9,180.
+> 1. **Split** every chunk into sentences, breaking after `.`, `!` or `?` followed by
+>    whitespace.
+> 2. **Build one fake duplicate per chunk.** Keep 75 percent of its sentences, chosen at
+>    random, in their original order. Replace each removed sentence with a random
+>    sentence from a donor chunk, picked at random from a **different** page, inserted
+>    at a random position. The fake is about the same length as the original and its
+>    replaced part is genuinely different content.
+> 3. **Round at random.** 75 percent of a chunk is rarely a whole number of sentences.
+>    For 7 sentences it is 5.25, so keep 5 sentences 75 percent of the time and 6
+>    sentences 25 percent of the time. On average every fake shares exactly 75 percent.
+>    A minimum of 1 sentence is always kept.
+> 4. **Score** every fake against its own original (cosine similarity).
+> 5. **Take the 5th percentile** of those 136 scores. A real pair is a duplicate only
+>    once it is as similar as 95 percent of the fakes.
+> 6. **Repeat over 5 seeds** (0 to 4) and average the five results.
 >
-> Caveat for honesty: this rests on inspecting six pairs. The signal was consistent but
-> the sample is small, and widening it would strengthen the number.
+> Result: **delta = 0.856**. Per-seed values 0.849 to 0.861, a spread of 0.012. It flags
+> **18 of the 9,180** corpus pairs. Settings: `calibration` section of config.yaml.
 >
-> `delta` (the "these two are duplicates" line) and `tau` (the "the set as a whole is too
-> redundant" line) remain two independent knobs doing two different jobs. Keep them
-> separate in config.
+> Why replace sentences rather than delete them. A copy with 25 percent deleted is a
+> strict subset of its original and scores far higher (p5 near 0.92) than two real chunks
+> that share most of their content, each with some text of their own. Replacing models
+> the real case.
+>
+> **Known limitation: 7 of 133 neighbor pairs score above delta.** Consecutive chunks on
+> the same page share **no** sentences (chunking has zero overlap), so by the definition
+> none of them are duplicates. Yet seven are flagged, with neighbors reaching up to
+> 0.896. BGE scores "the next paragraph on the same subject" about the same as "a 75
+> percent copy", and no single similarity threshold can fully separate the two. This is
+> a limit of single-vector similarity, which MMR shares without saying so. The cost of
+> a false flag is small and measurable: the flagged chunk is replaced by the next most
+> relevant clean one, and relevance preservation in EVALUATION.md shows whether that
+> hurts. The well-known pair c0 and c1 (the first two chunks of the Diabetes article,
+> 0.823) is not flagged.
+>
+> The neighbor counts in this section were measured once, while choosing the rule. The
+> code no longer computes them (DECIDED: the check was removed to keep calibration
+> lean, since it never fed into delta or tau). They stay here as the evidence behind
+> the 75 percent choice and the known limitation.
+>
+> Why 75 percent and not another level. The 70 and 80 percent rows were an early
+> exploration on one seed with round half to even, so they are indicative rather than
+> exact. The 75 percent row is the final rule.
+>
+> | Shared | delta | Corpus pairs flagged | Neighbors flagged |
+> | --- | --- | --- | --- |
+> | 70% | 0.823 | 73 | 19 of 133 |
+> | **75% (final)** | **0.856** | **18** | **7 of 133** |
+> | 80% | 0.891 | 4 | 1 of 133 |
+>
+> 70 percent flags too many neighbors. 80 percent flags so few pairs that repair would
+> almost never act. 75 percent sits between them.
+>
+> **DECIDED (random rounding in step 3).** It is the only option that makes the fakes
+> share exactly 75 percent on average. The alternatives move delta only slightly. Round half up averages 76.6 percent shared and
+> gives 0.865. Round half to even averages 73.9 percent and gives 0.857.
+>
+> History. The interim value was 0.834, p99.5 of the corpus pair distribution, chosen by
+> reading six pairs at the boundary so that c0/c1 would not be flagged. It was replaced
+> because a percentile assumes a fixed share of pairs are duplicates on any corpus, and
+> because it still flagged 15 of the 133 neighbor pairs.
+>
+> `delta` (the "these two are duplicates" line) and `tau` (the "the set as a whole is
+> too redundant" line) remain two different knobs doing two different jobs. tau is
+> derived from delta, but they are not the same thing.
 
 > **DECIDED (multi-way redundancy): iterative worst pair.** When three or more chunks
 > are mutually similar, repair drops one chunk at a time: find the single most similar
@@ -176,7 +243,7 @@ The details below were open and are now settled, each with its reasoning.
 > so ILS, relevance and cost compare fairly across plain, MMR and gate. The accepted
 > cost is that the "no pair above `delta`" guarantee breaks for that query, which is
 > acceptable because a certain amount of redundancy can reinforce facts. It is also
-> expected to be rare at k=3: `delta` flags only 46 of 9,180 corpus pairs, so the whole
+> expected to be rare at k=3: `delta` flags only 18 of 9,180 corpus pairs, so the whole
 > reserve would have to be duplicates of a kept chunk. Alternatives considered and left
 > unimplemented for now, to be revisited during evaluation if relax turns out to matter:
 > `ship_fewer` (return fewer than k), `mmr_pick` (pick the reject with the best MMR
@@ -186,8 +253,8 @@ The details below were open and are now settled, each with its reasoning.
 
 > **DECIDED (gate and repair use different tests).** The gate trips on the set mean
 > against `tau`, while dedup acts on single pairs against `delta`. These do not always
-> agree. A set with every pair at 0.81 trips the gate (mean above 0.80) but has no pair
-> above 0.834, so repair changes nothing and the 3 gate comparisons buy nothing. A set
+> agree. A set with every pair at 0.82 trips the gate (mean above 0.807) but has no pair
+> above 0.856, so repair changes nothing and the 3 gate comparisons buy nothing. A set
 > with one pair at 0.90 and two at 0.65 has a mean of 0.73, does not trip, and ships
 > its duplicate. This is accepted, not fixed: a certain amount of redundancy can
 > reinforce context and facts rather than waste it. The real risk is too much

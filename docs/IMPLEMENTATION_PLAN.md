@@ -13,10 +13,11 @@ first and the low-risk writeup work is left for the end.
 - Retrieval: `faiss` or plain numpy cosine. For a corpus of a few thousand chunks,
   numpy is fine and easier to explain.
 - Similarity matrix and metrics: numpy, with scikit-learn available if convenient.
+- Graphs: matplotlib (DECIDED). Standard, simple, and what every tutorial uses.
 - Config in a single YAML or Python config module. Every knob lives there.
 
 > **DECIDED (BGE usage details).** Both of bge-base-en-v1.5's easy-to-miss conventions
-> are applied, and both stay configurable.
+> are applied. Both are fixed in `src/embed.py` rather than config knobs.
 >
 > **Normalization: on.** Every embedding is L2-normalized at encode time
 > (`normalize_embeddings=True`), queries and passages alike. Normalizing keeps a
@@ -99,8 +100,8 @@ Fixed-size windows also sidestep a concrete trap on this corpus. All three artic
 have a "Signs and symptoms" heading, a "Causes" heading, and so on. Any splitter that
 respects line structure can emit those headings as their own tiny chunks, which then
 match each other at very high similarity across articles. Those are real duplicate
-pairs but completely uninteresting ones, and they would inflate the duplicate-rate
-metric with an artifact a viva panel would enjoy finding. Fixed windows absorb headings
+pairs but completely uninteresting ones, and they would inflate the count of duplicate
+pairs with an artifact a viva panel would enjoy finding. Fixed windows absorb headings
 mid-chunk instead.
 
 **DECIDED (section headings): keep them as body text.** A heading line such as
@@ -131,8 +132,9 @@ windows, 142 words on Type 1 and 44 on Type 2.
 15 at k=3 is 11 percent of the entire corpus, and a pool of 25 at k=5 is 18 percent. The
 lower end of a pool that size is genuinely weak material rather than a deep reserve of
 good alternatives, which makes the pool exhaustion case in METHOD.md section 5 a
-realistic event rather than a rare corner. Keep that in mind when that fallback gets
-decided.
+realistic event at large k. The fallback is now decided (relax, METHOD.md section 5),
+and at k=3 with delta = 0.856 it is expected to be rare, since only 18 of the 9,180
+corpus pairs sit above delta.
 
 > **DECIDED (short-fragment handling): drop.** Trailing stubs under `min_chunk_words`
 > are discarded rather than merged into the previous chunk. This was left open until it
@@ -151,9 +153,11 @@ decided.
 4. Full MMR implementation (the comparison baseline).
 5. Gate logic (signal plus trip decision).
 6. Repair step (dedup plus backfill).
+   Alongside 5 and 6: threshold calibration (`src/calibrate.py`,
+   `scripts/calibrate.py`), which derives delta and tau. See METHOD.md sections 4 and 5.
 7. Evaluation harness computing every metric in EVALUATION.md.
 8. Full experiment run across the dataset with results collected.
-9. Result analysis, tables, and the tau sensitivity sweep.
+9. Result analysis, tables, and the five core graphs (EVALUATION.md, Graphs).
 10. Writeup, slides, and any demo polish.
 
 ## 4. The 70 percent milestone
@@ -169,39 +173,51 @@ time-boxed work that hands off cleanly. Hitting the milestone means the worked e
 from METHOD.md passes as a test and the three methods produce comparable metric output
 on a small query set.
 
-## 5. Suggested repo layout
+## 5. Repo layout
+
+What exists now, with the parts not built yet marked `(planned)`.
 
 ```
 project/
   CLAUDE.md
+  README.md
+  main.py                # one query through all three methods, prints results + cost
+  config.yaml            # every knob lives here
   docs/
     METHOD.md
     EVALUATION.md
     IMPLEMENTATION_PLAN.md
+    FORMULAS.md          # every formula with a checkable number
     CHECKLIST.md         # short status board, read this first
-  config.yaml            # every knob lives here
   src/
+    config.py            # load config.yaml, resolve repo-relative paths
     corpus.py            # load + clean + chunk the corpus
-    embed.py             # bge-base embedding, normalization, similarity matrix
-    retrieve.py          # pool retrieval + plain top-k
+    embed.py             # bge-base embedding, normalization, similarity matrix, cache
+    retrieve.py          # pool retrieval, plain top-k, backfill reserve
     gate.py              # gate signal + trip decision
     repair.py            # dedup + backfill
     mmr.py               # MMR baseline
-    metrics.py           # all evaluation metrics
-    experiment.py        # run all three methods over a query set, collect results
+    calibrate.py         # derives delta (75% rule) and tau (formula)
+    metrics.py           # (planned) all evaluation metrics
+    experiment.py        # (planned) run all three methods over a query set
   scripts/
-    fetch_corpus.py      # run once, writes data/raw/*.txt
-  notebooks/
-    01_explore_corpus.ipynb   # chunk stats, eyeball retrieval
-    02_pick_thresholds.ipynb  # similarity distributions -> evidence for tau, delta
-    03_results.ipynb          # tables and the tau sweep
+    fetch_corpus.py      # run once, writes data/raw/*.txt and MANIFEST.json
+    calibrate.py         # run when corpus, model, or k changes; prints delta and tau
+  notebooks/             # (planned) exploration and figures only
   tests/
-    test_worked_example.py   # the METHOD.md fixture
+    conftest.py          # the METHOD.md worked example as a fixture
+    test_gate.py         # gate against the worked example
+    test_calibrate.py    # tau formula, random rounding, fake duplicates
   data/
     raw/                 # frozen Wikipedia text, committed
-    queries.json         # the query set
-  results/               # experiment output tables
+    cache/               # embeddings cache, gitignored, rebuilt automatically
+    queries.json         # (planned) the query set
+  results/               # (planned) per_query.csv, summary.csv, cost_vs_k.csv,
+                         # figures/ with the five core graphs
 ```
+
+Repair, MMR, and the metric functions do not have tests yet. The worked example in
+METHOD.md section 7 covers all of them and should be wired up next.
 
 **DECIDED (notebooks versus modules).** `src/` holds the real code. Notebooks import
 from it and never define pipeline logic. The reasons: the worked example has to run
@@ -214,16 +230,16 @@ keeping the loaded model in memory, looking at similarity distributions to choos
 thresholds, and producing report figures. Commit notebooks with outputs stripped
 (`nbstripout`).
 
-## 6. Function signatures (starting point, adjust as needed)
+## 6. Function signatures
 
-These are a sketch to anchor the structure, not a contract. Where a signature touches
-an open decision, the decision still has to be made first.
+As implemented. Every function that touches the similarity matrix returns the number of
+lookups it performed alongside its result, because compute cost in EVALUATION.md is
+measured, not estimated.
 
 ```python
 # config.py
-def load_config(path) -> dict: ...
-def require(config: dict, dotted_key: str):
-    """Fetch a config value, raising a named error if it is still null (undecided)."""
+def load_config(path=DEFAULT_CONFIG_PATH) -> dict: ...
+def resolve_path(relative: str) -> Path: ...
 
 # corpus.py
 def load_pages(raw_dir, pages: list[str], strip_sections: list[str],
@@ -233,105 +249,135 @@ def load_pages(raw_dir, pages: list[str], strip_sections: list[str],
     dict's order fixes chunk id assignment and chunk id is the tie-break key."""
 def chunk_pages(pages, chunk_size_words, overlap_words, min_chunk_words) -> list[Chunk]:
     """Fixed-size word windows, never crossing a page boundary. Chunk carries
-    id, text, source page, and word count."""
+    id, page, text, and word count."""
 
 # embed.py
-def embed_texts(texts: list[str]) -> np.ndarray: ...   # always L2 normalized
-def embed_query(query: str, prefix: str | None) -> np.ndarray:
-    """Applies the BGE instruction prefix to the query only. Passages get none."""
-def similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
-    """S = E @ E.T on normalized embeddings. Computed once, cached to disk."""
+def embed_texts(texts, model_name, batch_size=32, device="cpu") -> np.ndarray:
+    """Passages. Always L2 normalized, never prefixed."""
+def embed_query(query, model_name, device="cpu") -> np.ndarray:
+    """Adds BGE_QUERY_PREFIX in front of the query. Always L2 normalized."""
+def similarity_matrix(embeddings) -> np.ndarray:
+    """S = E @ E.T, after checking every row has length 1."""
+def build_or_load_embeddings(chunk_texts, model_name, cache_path, batch_size=32,
+                             device="cpu", verbose=True) -> np.ndarray:
+    """Cached on disk, rebuilt whenever a fingerprint of the chunk texts and model
+    name stops matching."""
 
 # retrieve.py
-def retrieve_pool(query_emb, chunk_embs, pool_size: int) -> list[tuple[int, float]]:
-    """Return [(chunk_id, relevance_to_query), ...] sorted by relevance desc,
-    ties broken by chunk id ascending."""
-def plain_top_k(pool: list[tuple[int, float]], k: int) -> list[int]: ...
+def rank_by_relevance(relevance) -> list[int]:
+    """All chunk ids by relevance desc, ties by chunk id asc (DECIDED tie-break)."""
+def retrieve_pool(query_emb, chunk_embs, pool_size) -> list[tuple[int, float]]: ...
+def plain_top_k(pool, k) -> list[int]: ...
+def reserve(pool, k) -> list[tuple[int, float]]:
+    """The pool after the top-k, which repair backfills from."""
 
 # gate.py
-def gate_signal(topk_ids: list[int], sim_matrix: np.ndarray) -> float:
-    """Mean pairwise chunk-to-chunk similarity within top-k.
-    DECIDED: simple mean (see METHOD.md section 4)."""
-def gate_trips(signal: float, tau: float) -> bool: ...
+def gate_trips(signal, tau) -> bool:
+    """Strictly greater than tau trips."""
+def run_gate(topk_ids, sim_matrix, tau) -> GateResult:
+    """signal (simple mean of the C(k,2) pair similarities), trips, comparisons,
+    and every pair, for inspection."""
 
 # repair.py
-def repair(topk_ids, pool, sim_matrix, relevance, delta, k) -> list[int]:
-    """Dedup then backfill. Returns final k chunk ids.
-    DECIDED: iterative worst-pair dedup, pairwise-delta backfill check,
-    relax on pool exhaustion (all in METHOD.md section 5)."""
+def dedup(topk_ids, sim_matrix, relevance, delta) -> tuple[list, list, int]:
+    """Iterative worst pair. Returns (kept, dropped, comparisons)."""
+def backfill(kept, reserve, sim_matrix, delta, k, backfill_check="pairwise_delta",
+             exhaustion_fallback="relax") -> tuple[list, list, list, list, int]:
+    """Returns (kept, added, rejected, relaxed, comparisons)."""
+def repair(topk_ids, reserve_pool, sim_matrix, relevance, delta, k,
+           backfill_check="pairwise_delta", exhaustion_fallback="relax") -> RepairResult:
+    """Dedup then backfill. final_ids, dropped, added, rejected, relaxed, comparisons."""
 
 # mmr.py
-def mmr(pool, query_relevance, sim_matrix, k, lambda_: float) -> list[int]: ...
+def mmr(pool, sim_matrix, k, lambda_) -> tuple[list[int], int]:
+    """(selected chunk ids, comparisons)."""
 
-# metrics.py
+# calibrate.py
+def calibrate_delta(chunks, embeddings, model_name, shared_fraction, percentile, seeds,
+                    device="cpu") -> tuple[float, list[float]]:
+    """(delta, per-seed values). The 75 percent shared-sentence rule."""
+def typical_pair_similarity(sim_matrix, k, delta) -> float:
+    """b: median non-duplicate pair similarity in pseudo-query top-k sets."""
+def tau_from_delta(delta, b, k) -> float:
+    """(delta + (C(k,2) - 1) * b) / C(k,2)."""
+
+# metrics.py (planned)
 def ils(ids, sim_matrix) -> float: ...
 def relevance_preservation(ids, query_relevance) -> float: ...
-def duplicate_rate(ids, sim_matrix, delta) -> float: ...
 # trigger_rate and compute_cost are computed at the experiment level, across queries.
 
-# experiment.py
+# experiment.py (planned)
 def run_all_methods(queries, corpus, config) -> ResultsTable:
     """Run plain / MMR / gate over the query set, count comparisons, collect metrics."""
 ```
 
-Instrument `mmr`, `gate`, and `repair` to count the similarity comparisons they
-actually perform, since compute cost in EVALUATION.md is measured, not estimated.
-
 ## 7. Config schema
 
-Every value below is a knob. Several have interim defaults that are explicitly not
-final decisions, marked accordingly. Do not move any of these into inline constants.
+`config.yaml` is the source of truth. Decided knobs carry a one-line comment there, and
+the reasoning lives in these docs. An undecided knob gets a clearly labelled interim
+default and a `NEEDS DECISION` comment, as CLAUDE.md describes. Right now every knob is
+decided.
 
-Undecided knobs are written as `null`, which parses to Python `None`. That is deliberate:
-`src/config.py` provides `require(config, "gate.tau")`, which raises a named error on a
-null rather than letting an unmade decision flow into a comparison. A placeholder string
-would compare without complaint and hide the fact that nobody chose the value.
+Copy as of the threshold calibration:
 
 ```yaml
 model:
   name: "BAAI/bge-base-en-v1.5"
+  device: "cpu"                # DECIDED: CPU keeps similarities identical on every machine
+  batch_size: 32               # encoding batch size, affects speed only
+  cache_path: "data/cache/embeddings.npz"   # rebuilt automatically when stale
 
 corpus:
   raw_dir: "data/raw"
-  pages:                       # DECIDED: overlapping content, exercises the gate
+  pages:                       # DECIDED
     - "Diabetes"
     - "Type 1 diabetes"
     - "Type 2 diabetes"
-  strip_sections:              # DECIDED: cut before chunking
+  strip_sections:              # DECIDED
     - "References"
     - "External links"
     - "See also"
     - "Further reading"
     - "Notes"
-    - "Works cited"            # added after inspecting the fetched text
-  keep_headings: true          # DECIDED: keep heading words as body text
-  chunk_size_words: 150        # DECIDED: fixed-size windows
-  overlap_words: 0             # DECIDED: no overlap, redundancy must be real
-  min_chunk_words: 30          # DECIDED: drop the trailing stub, measured cost 18 words
+    - "Works cited"
+  keep_headings: true          # DECIDED: heading words kept as body text
+  chunk_size_words: 150        # DECIDED
+  overlap_words: 0             # DECIDED
+  min_chunk_words: 30          # DECIDED: shorter trailing stubs are dropped
 
 retrieval:
   k: 3                         # matches the worked example; real runs may use larger k
-  pool_multiplier: 5           # DECIDED: pool_size = k * pool_multiplier, so k=5 -> 25
+  pool_multiplier: 5           # DECIDED: pool_size = k * pool_multiplier
 
 gate:
-  tau: null                    # NEEDS DECISION: fixed vs percentile vs tuned (METHOD.md)
+  tau: 0.807                   # DECIDED rule, from scripts/calibrate.py. Tied to k and
+                               # delta: rerun the script if either changes
 
 repair:
-  delta: null                  # NEEDS DECISION: fixed vs data-driven (METHOD.md)
-  backfill_check: "pairwise_delta"   # DECIDED (METHOD.md)
-  exhaustion_fallback: "relax"       # DECIDED (METHOD.md)
+  delta: 0.856                 # DECIDED rule, from scripts/calibrate.py (75% shared)
+  backfill_check: "pairwise_delta"   # DECIDED. unimplemented alternative : set_level_tau
+  exhaustion_fallback: "relax"       # DECIDED. unimplemented alternatives : ship_fewer,
+                                     # mmr_pick, relevance_floor, delta_ladder
 
 mmr:
-  lambda: 0.7                  # baseline knob, matches worked example
+  lambda: 0.7                  # DECIDED
+
+calibration:                   # read only by scripts/calibrate.py
+  delta_shared_fraction: 0.75  # DECIDED: a duplicate shares about 75% of its sentences
+  delta_percentile: 5          # DECIDED: delta = p5 of fake-duplicate similarities
+  delta_seeds: [0, 1, 2, 3, 4] # DECIDED: average over 5 seeds to steady the estimate
 ```
 
 ## 8. Testing
 
 - The METHOD.md worked example is the primary fixture. Both MMR and the gate method
   must return {A, C, D} on it, and the metric functions must reproduce the numbers in
-  EVALUATION.md (ILS 0.50 to 0.283, relevance 0.88 to 0.853, duplicate rate 33 to 0
-  percent).
+  EVALUATION.md (ILS 0.50 to 0.283, relevance 0.88 to 0.853).
 - Add a small synthetic case that forces the gate NOT to trip, to confirm the cheap
   path ships plain top-k untouched with only C(k,2) comparisons spent.
-- Add a case that forces pool exhaustion, so the chosen fallback is actually exercised
-  once that decision is made.
+- Add a case that forces pool exhaustion, so the relax fallback is actually exercised.
+
+Status: `tests/test_gate.py` covers the gate on the worked example, including a set
+that does not trip. `tests/test_calibrate.py` covers the tau formula, the random
+rounding, and how fake duplicates are built. MMR, repair (including pool exhaustion),
+and the metrics are not tested yet.

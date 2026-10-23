@@ -12,11 +12,12 @@ the detail belongs in the other three docs.
 - [x] 5. Gate (signal plus trip decision)  <-- src/gate.py, tests/test_gate.py
 - [x] 6. Repair (dedup plus backfill)      <-- src/repair.py, no tests yet
       Stages 2 to 6 are wired together in main.py, which runs ONE query through all
-      three methods.
+      three methods. Threshold calibration: src/calibrate.py, scripts/calibrate.py,
+      tests/test_calibrate.py.
 - [ ] 7. Evaluation harness          <-- stages 1 to 7 are the 70 percent milestone.
                                          Blocked on the query set decision.
 - [ ] 8. Full experiment run
-- [ ] 9. Analysis, tables, tau sweep
+- [ ] 9. Analysis, tables, the five core graphs (EVALUATION.md)
 - [ ] 10. Writeup and slides
 
 ## Settled
@@ -27,7 +28,7 @@ the detail belongs in the other three docs.
 - Chunking: fixed 150 word windows, 0 overlap, drop trailing stubs under 30 words
 - Short fragments: drop, not merge. Measured cost is 18 words out of 20,304
 - Corpus size: 136 chunks (Diabetes 46, Type 1 59, Type 2 31), 20,304 cleaned words
-- Undecided knobs are `null` in config.yaml, and `config.require()` errors on them
+- Undecided knobs get a labelled interim default plus a NEEDS DECISION comment
 - Embeddings: L2 normalized, cosine equals dot product, one cached similarity matrix
 - BGE query prefix: applied to queries only, never to passages
 - Tie-break: relevance desc, then chunk id asc, stable sort
@@ -41,15 +42,25 @@ the detail belongs in the other three docs.
   `ship_fewer`, `mmr_pick`, `relevance_floor`, `delta_ladder`. Expected rare at k=3
 - Gate/repair mismatch (mean vs tau, pairs vs delta): accepted. Some redundancy can
   reinforce facts; the risk of too much is handled by how tau and delta are set
-- `delta` = 0.834 INTERIM, p99.5 of corpus pairs, checked by reading pairs at the boundary
-- `tau` = 0.80 INTERIM, p70 of measured signals, matches the 30.1% of top-3 sets that
-  really do contain a pair above delta. TIED TO k=3, re-derive if k changes.
+- `delta` = 0.856 by the 75% shared-sentence rule: p5 of fake duplicates that keep 75%
+  of a chunk's sentences and swap the rest for another page's, mean of 5 seeds. Flags
+  18 of 9,180 pairs. Known limit: 7 of 133 neighbor pairs also flagged. METHOD.md sec 5
+- `tau` = 0.807 at k=3 by formula: (delta + (C(k,2)-1) * b) / C(k,2), b = 0.782.
+  Rerun scripts/calibrate.py whenever k, corpus, or model changes. METHOD.md sec 4
+- Delta rule uses random rounding (75% exact on average). b = median of non-duplicate
+  pseudo-query top-k pairs, each chunk excluded from its own top-k
+- Neighbor false-flag check: removed from code and eval, it never fed delta or tau.
+  The one-time measurement (7 of 133) stays in METHOD.md sec 5 as evidence
+- Duplicate rate metric: dropped, it graded the gate with its own delta (circular)
+- Eval graphs, core set of 5: cost per query, cost vs k (3, 5, 10), signal histogram
+  with tau line, tripped vs not-tripped ILS and relevance, ILS vs relevance scatter.
+  Every number split tripped / not tripped. Data as CSVs in results/. Plotted with
+  matplotlib. Details in EVALUATION.md
 
 ## Still open
 
-- `tau` and `delta` for the FINAL version: how they are chosen dynamically per dataset.
-  Both are pinned to fixed interim values for now (see Settled).
-- Query set: how many queries, and how they are generated
+- Query set: how many queries, how they are generated, broad vs narrow mix, and
+  whether any of it is split off for calibration. Blocks the eval harness
 
 ## Gotchas to remember
 
@@ -60,8 +71,12 @@ must be read off the measured distribution. A real tau of 0.35 would trip on eve
 query.
 
 The corpus is small, 136 chunks. A pool of 25 at k=5 is 18 percent of everything there
-is, so backfill running out of clean candidates is a realistic case and not a rare
-corner. Remember this when the pool exhaustion fallback gets decided.
+is, so backfill running out of clean candidates is realistic at large k. At k=3 with
+delta 0.856 it should be rare, and the decided fallback is relax.
+
+BGE cannot fully tell "the next paragraph on the same subject" from "a 75 percent copy".
+Neighbors reach 0.896, above delta. This is a measured limit, not a bug. Say it plainly
+in the writeup.
 
 Cleaning removes only about 2 percent of each article. The Wikipedia plaintext export
 had already dropped the citation text, so References arrives as an empty heading. The

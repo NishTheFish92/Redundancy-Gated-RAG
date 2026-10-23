@@ -1,14 +1,13 @@
 """Tests for the redundancy gate.
 
 Three groups: the METHOD.md worked example reproduces exactly, the comparison counter
-tells the truth, and the pieces that are still undecided refuse to guess.
+tells the truth, and bad input fails loudly.
 """
 
 import numpy as np
 import pytest
 
 from src.gate import (
-    gate_signal,
     gate_trips,
     pairwise_similarities,
     run_gate,
@@ -21,8 +20,9 @@ class TestWorkedExample:
 
     def test_signal_is_half(self, sim_matrix, plain_top3):
         # (0.85 + 0.30 + 0.35) / 3 = 0.50
-        signal, _ = gate_signal(plain_top3, sim_matrix)
-        assert signal == pytest.approx(0.50, abs=1e-6)
+        assert run_gate(plain_top3, sim_matrix, EXAMPLE_TAU).signal == pytest.approx(
+            0.50, abs=1e-6
+        )
 
     def test_gate_trips(self, sim_matrix, plain_top3):
         assert run_gate(plain_top3, sim_matrix, EXAMPLE_TAU).trips is True

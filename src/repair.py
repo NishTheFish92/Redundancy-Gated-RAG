@@ -1,6 +1,7 @@
 """The repair step: dedup, then backfill.
 
-Runs only when the gate trips, which on this corpus is roughly 31 percent of queries.
+Runs only when the gate trips, which on this corpus is roughly 24 percent of queries
+(measured on chunk pseudo-queries at k=3, see scripts/calibrate.py).
 Two parts, in order (METHOD.md section 5):
 
   Dedup.    Find pairs in the top-k above `delta` and drop the lower-relevance member of

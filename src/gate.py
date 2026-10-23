@@ -72,16 +72,6 @@ def signal_from_pairs(pairs: list[tuple[int, int, float]]) -> float:
     return float(np.mean([sim for _, _, sim in pairs]))
 
 
-def gate_signal(topk_ids: list[int], sim_matrix: np.ndarray) -> tuple[float, int]:
-    """The gate signal: how redundant the current top-k is, as one number.
-
-    Returns (signal, comparisons). The signal is the plain mean of the C(k,2) pairwise
-    similarities, which is what METHOD.md section 4 specifies.
-    """
-    pairs, comparisons = pairwise_similarities(topk_ids, sim_matrix)
-    return signal_from_pairs(pairs), comparisons
-
-
 def gate_trips(signal: float, tau: float) -> bool:
     """Strictly greater than tau trips the gate. At or below tau ships as is.
 

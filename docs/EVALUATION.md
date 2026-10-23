@@ -75,30 +75,21 @@ The defensible claim is that this dip is small and comparable to what MMR pays f
 same diversity gain, so always compute both ILS and relevance for MMR too and put the
 three methods side by side.
 
-## Metric 5: Duplicate reduction
+## Metric 5: Duplicate reduction (REMOVED)
 
-Supporting evidence, and more intuitive for a non-technical committee than ILS. It is
-a coarser restatement of the same redundancy story, which is why it ranks below the
-ILS-plus-relevance pair rather than beside it.
-
-**Duplicate rate.** The fraction of chunk pairs in the final set whose similarity
-exceeds `delta`.
-
-    duplicate_rate = (pairs above delta) / C(k,2)
-
-Worked example: plain top-3 has 1 over-delta pair (A-B at 0.85, delta = 0.8) out of 3
-pairs, so 33 percent. After repair, {A, C, D} has zero pairs above delta, so 0
-percent. Averaged over the query set this becomes a line like "near-duplicate pairs
-fell from 18 percent of top-k pairs to 2 percent."
-
-Direction: lower is better.
+> **DECIDED: dropped.** It counted pairs in the final set above `delta`. The gate
+> method's repair removes exactly those pairs using the same `delta`, so on every query
+> where repair ran the gate scored 0 percent by construction. It graded the method with
+> the method's own rule, which a reviewer would rightly call circular. Replacement
+> metrics that show real differences between the three methods, with outputs written to
+> a `results/` folder, are still to be designed. See docs/CHECKLIST.md.
 
 ## Metric 6: Downstream answer quality (STRETCH, optional)
 
 Nice to have, not required to defend the core claim. Use an LLM as a judge on a small
 handful of queries to check that diversification does not break answer generation. It
 is noisy, slow, and not part of the central efficiency argument. Do this only if time
-allows, and never at the expense of getting metrics 1 through 5 solid across the full
+allows, and never at the expense of getting metrics 1 through 4 solid across the full
 dataset.
 
 ---
@@ -109,20 +100,72 @@ dataset.
    reviewer judges the contribution on.
 2. **ILS + Relevance preservation (bundled).** Proves the method actually works, as a
    pair, not in isolation.
-3. **Duplicate reduction.** Supporting, committee-friendly restatement of the
-   redundancy story.
-4. **Downstream answer quality.** Stretch goal only. Skip if time is tight.
+3. **Downstream answer quality.** Stretch goal only. Skip if time is tight.
 
 ## Reporting guidance
 
 - Put the three methods (plain top-k, MMR, gate) in one comparison table covering ILS,
-  relevance, duplicate rate, trigger rate (gate only), and average compute cost.
-- Include a small **sensitivity sweep over `tau`**: a few values from strict to loose,
-  showing where trigger rate lands and how ILS, relevance, and cost move with it. This
-  demonstrates `tau` is doing real work rather than being one lucky pick, and directly
-  addresses the open `tau`-setting question in METHOD.md.
+  relevance, trigger rate (gate only), and average compute cost.
+- **Deferred for now: a small sensitivity sweep over `tau`**, a few values from strict
+  to loose, showing where trigger rate lands and how ILS, relevance, and cost move with
+  it. It would demonstrate `tau` is doing real work rather than being one lucky pick.
+- **DECIDED, deferred for now: also sweep `delta`** (for example 0.82 to 0.92). Left
+  out of the core graph set below for now, kept here so the reasoning is not lost. Because tau is derived
+  from delta (METHOD.md section 4), each delta value comes with its own tau, so this is
+  one sweep axis that moves both. It shows how ILS, relevance, and cost
+  respond to the definition of "duplicate". The sweep is a sensitivity analysis only:
+  delta is set by the calibration rule, never by picking the value with the best
+  results, which would be tuning on the test set.
 - Report averages across the full query set, and keep the per-query raw numbers so a
   reviewer can spot-check.
 - If the gate underperforms MMR on some queries, or barely fires on a too-diverse
   corpus, report it plainly. An honest weak spot is more credible than results that
   look perfect everywhere.
+- **DECIDED: split results into tripped and not-tripped queries.** Averages over the
+  whole query set hide the story, because the gate only changes the minority of
+  queries that trip. On tripped queries, compare how much each method reduced ILS and
+  what it cost in relevance. On not-tripped queries, the gate is identical to plain
+  top-k by design, so the question is how often MMR changed an already-fine set and how
+  much relevance that cost. That second group is the thesis: always-on MMR does work,
+  and gives up relevance, on queries that never needed it.
+
+## Graphs (DECIDED, the core set)
+
+The graphs are the main deliverable of the evaluation, more than the tables. Each one
+carries one message. The data behind every graph is also saved as a CSV in `results/`,
+so any plot can be redrawn and checked.
+
+1. **Cost per query.** Bar chart, one bar each for plain, MMR, and gate: average
+   similarity comparisons per query across the whole query set. Message: the gate
+   costs a fraction of MMR. This is the headline.
+2. **Cost as k grows.** Line chart, k = 3, 5, 10 on the x-axis, average comparisons on
+   the y-axis, one line per method. Message: MMR's cost grows quickly with k while the
+   gate stays small on queries that do not trip, so the gap widens. It answers "at
+   k = 3 the saving is only microseconds". tau is re-derived for each k with the
+   formula in METHOD.md section 4.
+3. **Where queries fall.** Histogram of the gate signal, one value per query (the mean
+   pair similarity of its plain top-k). X-axis is the signal, roughly 0.68 to 0.88, in
+   bins about 0.01 wide. Y-axis is the number of queries. A vertical line at tau.
+   Bars left of the line in one colour (shipped as-is, cost C(k,2) lookups), bars to
+   the right in another (tripped, repaired), each side labelled with its share of
+   queries. Message: most queries need nothing, and only the tail on the right ever
+   needed MMR's work. Optional faint marker at b to show tau sits just above a normal
+   top-k. Leave it off the slide version.
+4. **Tripped vs not tripped.** Grouped bars of ILS and relevance for each method,
+   shown separately for the two groups of queries. Message: on queries that were
+   already fine, MMR changes things for no gain.
+5. **ILS vs relevance.** Scatter, one dot per query per method. Message: the gate
+   removes redundancy without losing relevance.
+
+Considered and left out for now: a delta sweep graph (see above), agreement between
+the gate and MMR (shared chunks on tripped queries), and wall-clock time per query
+(real but noisy at this corpus size).
+
+## results/ folder (DECIDED)
+
+- `results/per_query.csv`: one row per query and method, with every number, for
+  spot-checking.
+- `results/summary.csv`: the three-method comparison table, also split into tripped
+  and not-tripped.
+- `results/cost_vs_k.csv`: the data for graph 2.
+- `results/figures/`: the five graphs.

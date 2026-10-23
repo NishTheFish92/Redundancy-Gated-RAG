@@ -19,9 +19,10 @@ Reminder: those example values are synthetic. See the note in METHOD.md section 
 | `S` | similarity matrix, shape `(n, n)` |
 | `q` | the query embedding, length `d` |
 | `k` | how many chunks are returned (config, currently 3) |
-| `tau` | gate threshold, the "this set is too redundant" line (undecided) |
-| `delta` | duplicate threshold, the "these two are the same" line (undecided) |
+| `tau` | gate threshold, the "this set is too redundant" line (0.807 at k = 3, formula 15) |
+| `delta` | duplicate threshold, the "these two are the same" line (0.856, formula 14) |
 | `lambda` | MMR relevance versus diversity weight (0.7) |
+| `b` | typical similarity of two non-duplicate chunks in the same top-k (0.782 at k = 3) |
 
 ---
 
@@ -196,16 +197,40 @@ relevance_preserved = ( sum of relevance[i] for i in the final set ) / k
 Worked example: {A, B, C} gives `(0.90 + 0.88 + 0.86) / 3 = 0.88`, and {A, C, D} gives
 `(0.90 + 0.86 + 0.80) / 3 = 0.853`.
 
-## 14. Duplicate rate
+---
 
-Fraction of pairs in the final set that are above delta. Lower is better.
+# Calibration (how delta and tau are set)
+
+Both run offline in `scripts/calibrate.py` and are pinned in config.yaml. Full reasoning
+in METHOD.md sections 4 and 5.
+
+## 14. Duplicate threshold (delta)
+
+For every chunk `i`, build a fake duplicate `f_i` that keeps 75 percent of its sentences
+and replaces the rest with sentences from a chunk on another page. Then
 
 ```
-duplicate_rate = (pairs with S[i][j] > delta) / C(k, 2)
+delta = mean over seeds 0..4 of  p5( cosine(f_i, chunk_i) for every chunk i )
 ```
 
-Worked example: {A, B, C} has 1 such pair out of 3, so 33 percent. {A, C, D} has none,
-so 0 percent.
+`p5` is the 5th percentile. When 75 percent of a chunk is not a whole number of
+sentences, round at random: for 7 sentences (5.25) keep 5 with probability 0.75 and 6
+with probability 0.25.
+
+Current numbers: per-seed p5 values 0.861, 0.849, 0.861, 0.858, 0.854, mean **0.856**.
+
+## 15. Gate threshold (tau)
+
+```
+tau = ( delta + (C(k,2) - 1) * b ) / C(k,2)
+```
+
+The gate signal of a top-k holding one pair at `delta` and every other pair at `b`.
+`b` is the median of all pseudo-query top-k pair similarities at or below `delta`, where
+each chunk stands in as a query and is excluded from its own top-k.
+
+Current numbers, k = 3: `(0.856 + 2 * 0.782) / 3 = 0.807`. At k = 5, `b` = 0.772 and
+`tau = (0.856 + 9 * 0.772) / 10 = 0.780`.
 
 ---
 
