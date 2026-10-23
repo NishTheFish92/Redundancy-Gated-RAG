@@ -33,8 +33,7 @@ retrieval:
   pool_multiplier: 5           # DECIDED: pool_size = k * pool_multiplier
 
 gate:
-  tau: 0.807                   # DECIDED rule, from scripts/calibrate.py. Tied to k and
-                               # delta: rerun the script if either changes
+  tau: 0.781                   # placeholder only computed on the fly from delta and k
 
 repair:
   delta: 0.856                 # DECIDED rule, from scripts/calibrate.py (75% shared)
@@ -49,3 +48,8 @@ calibration:                   # read only by scripts/calibrate.py
   delta_shared_fraction: 0.75  # DECIDED: a duplicate shares about 75% of its sentences
   delta_percentile: 5          # DECIDED: delta = p5 of fake-duplicate similarities
   delta_seeds: [0, 1, 2, 3, 4] # DECIDED: average over 5 seeds to steady the estimate
+
+evaluation:                    # read by evaluation/make_graphs.py
+  queries_path: "data/queries.json"
+  results_dir: "results"
+  cost_vs_k: [3, 5, 10, 15]    # DECIDED: the k values for graph 2

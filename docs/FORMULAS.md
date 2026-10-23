@@ -201,7 +201,8 @@ Worked example: {A, B, C} gives `(0.90 + 0.88 + 0.86) / 3 = 0.88`, and {A, C, D}
 
 # Calibration (how delta and tau are set)
 
-Both run offline in `scripts/calibrate.py` and are pinned in config.yaml. Full reasoning
+delta runs offline in `scripts/calibrate.py` and is pinned in config.yaml. tau is computed
+on the fly every run from delta and k (`compute_tau`), so it always matches. Full reasoning
 in METHOD.md sections 4 and 5.
 
 ## 14. Duplicate threshold (delta)

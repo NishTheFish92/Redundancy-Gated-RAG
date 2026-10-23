@@ -10,11 +10,13 @@ import numpy as np
 import pytest
 
 from src.calibrate import (
+    compute_tau,
     make_fake_duplicate,
     pseudo_query_pair_similarities,
     sentences_to_keep,
     split_sentences,
     tau_from_delta,
+    typical_pair_similarity,
 )
 
 
@@ -25,6 +27,11 @@ class TestTauFormula:
 
     def test_k5_spreads_one_duplicate_over_ten_pairs(self):
         assert tau_from_delta(0.9, 0.7, 5) == pytest.approx((0.9 + 9 * 0.7) / 10)
+
+    def test_compute_tau_is_the_formula_with_measured_b(self, sim_matrix):
+        # compute_tau is just the formula fed with b measured on the matrix
+        b = typical_pair_similarity(sim_matrix, 3, 0.8)
+        assert compute_tau(sim_matrix, 3, 0.8) == pytest.approx(tau_from_delta(0.8, b, 3))
 
     def test_tau_sits_between_b_and_delta(self):
         tau = tau_from_delta(0.856, 0.782, 3)

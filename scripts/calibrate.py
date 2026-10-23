@@ -1,12 +1,14 @@
-"""Derive delta and tau from the corpus and print them for config.yaml.
+"""Derive delta from the corpus and print it for config.yaml. Takes a minute or two.
 
-Run manually whenever the corpus, the chunking, the embedding model, or k changes:
+Run manually whenever the corpus, the chunking, or the embedding model changes:
 
     uv run python scripts/calibrate.py
 
-It does not edit config.yaml. It prints the values and the evidence behind them, and a
-person copies the two numbers in. That keeps every change to a threshold visible in git.
-The rules are in src/calibrate.py and docs/METHOD.md sections 4 and 5.
+It does not edit config.yaml. It prints delta and the evidence behind it, and a person
+copies the number in, which keeps every change to the threshold visible in git. Changing
+k does NOT need this script: tau is computed on the fly from delta and k every run. The
+tau printed at the end is for information only. The rules are in src/calibrate.py and
+docs/METHOD.md sections 4 and 5.
 """
 
 import sys
@@ -63,7 +65,7 @@ def main() -> None:
     signals = pseudo_query_pair_similarities(sim_matrix, k).reshape(-1, n_pairs).mean(1)
     trip_rate = np.mean([gate_trips(s, tau) for s in signals])
 
-    print(f"\ntau = {tau:.3f}   (k = {k})")
+    print(f"\ntau = {tau:.3f}   (k = {k}, for information: runs compute it on the fly)")
     print(f"  b (median non-duplicate pair in a pseudo-query top-{k}) = {b:.3f}")
     print(f"  tau = (delta + {n_pairs - 1} * b) / {n_pairs}")
     print(f"  trip rate on {len(signals)} pseudo-queries: {trip_rate:.1%} "

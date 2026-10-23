@@ -16,8 +16,10 @@ docs/FORMULAS.md formulas 14 and 15.
          an otherwise normal top-k." That is a weighted average of delta and b, the
          typical similarity of two non-duplicate chunks in the same top-k.
 
-This runs offline from scripts/calibrate.py. Encoding the fakes takes the embedding
-model, so the results are pinned in config.yaml rather than recomputed per query.
+delta runs offline from scripts/calibrate.py. Encoding the fakes takes the embedding
+model, so delta is pinned in config.yaml. tau needs no model, only delta, k and the
+similarity matrix, so it is computed on the fly every run by `compute_tau`. Changing k
+therefore never needs a recalibration step.
 """
 
 import itertools
@@ -154,6 +156,15 @@ def typical_pair_similarity(sim_matrix: np.ndarray, k: int, delta: float) -> flo
     """
     pair_sims = pseudo_query_pair_similarities(sim_matrix, k)
     return float(np.median(pair_sims[pair_sims <= delta]))
+
+
+def compute_tau(sim_matrix: np.ndarray, k: int, delta: float) -> float:
+    """tau for this k, worked out on the fly. Takes milliseconds: no model, only S.
+
+    Called once per run (not per query) by main.py and the evaluation. It is calibration,
+    not part of answering a query, so its lookups are not counted as comparisons.
+    """
+    return tau_from_delta(delta, typical_pair_similarity(sim_matrix, k, delta), k)
 
 
 def tau_from_delta(delta: float, b: float, k: int) -> float:

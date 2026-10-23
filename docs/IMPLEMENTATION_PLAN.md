@@ -154,8 +154,9 @@ corpus pairs sit above delta.
 5. Gate logic (signal plus trip decision).
 6. Repair step (dedup plus backfill).
    Alongside 5 and 6: threshold calibration (`src/calibrate.py`,
-   `scripts/calibrate.py`), which derives delta and tau. See METHOD.md sections 4 and 5.
-7. Evaluation harness computing every metric in EVALUATION.md.
+   `scripts/calibrate.py`), which derives delta. tau is computed on the fly every run.
+   See METHOD.md sections 4 and 5.
+7. Evaluation harness computing every metric in EVALUATION.md (`evaluation/`).
 8. Full experiment run across the dataset with results collected.
 9. Result analysis, tables, and the five core graphs (EVALUATION.md, Graphs).
 10. Writeup, slides, and any demo polish.
@@ -197,26 +198,29 @@ project/
     gate.py              # gate signal + trip decision
     repair.py            # dedup + backfill
     mmr.py               # MMR baseline
-    calibrate.py         # derives delta (75% rule) and tau (formula)
-    metrics.py           # (planned) all evaluation metrics
-    experiment.py        # (planned) run all three methods over a query set
+    calibrate.py         # delta (75% rule), and tau computed on the fly (formula)
+  evaluation/            # kept apart from src/, which holds only the method
+    metrics.py           # ILS and relevance of a final set
+    experiment.py        # run all three methods over the query set, one row each
+    make_graphs.py       # run it yourself: CSVs and the five graphs into results/
   scripts/
     fetch_corpus.py      # run once, writes data/raw/*.txt and MANIFEST.json
-    calibrate.py         # run when corpus, model, or k changes; prints delta and tau
+    calibrate.py         # run when corpus, chunking, or model changes; prints delta
   notebooks/             # (planned) exploration and figures only
   tests/
     conftest.py          # the METHOD.md worked example as a fixture
     test_gate.py         # gate against the worked example
     test_calibrate.py    # tau formula, random rounding, fake duplicates
+    test_metrics.py      # ILS and relevance against the worked example
   data/
     raw/                 # frozen Wikipedia text, committed
     cache/               # embeddings cache, gitignored, rebuilt automatically
-    queries.json         # (planned) the query set
-  results/               # (planned) per_query.csv, summary.csv, cost_vs_k.csv,
-                         # figures/ with the five core graphs
+    queries.json         # the query set, 50 narrow + 50 broad
+  results/               # written by evaluation/make_graphs.py: per_query.csv,
+                         # summary.csv, cost_vs_k.csv, figures/
 ```
 
-Repair, MMR, and the metric functions do not have tests yet. The worked example in
+Repair and MMR do not have tests yet. The worked example in
 METHOD.md section 7 covers all of them and should be wired up next.
 
 **DECIDED (notebooks versus modules).** `src/` holds the real code. Notebooks import
@@ -300,15 +304,20 @@ def typical_pair_similarity(sim_matrix, k, delta) -> float:
     """b: median non-duplicate pair similarity in pseudo-query top-k sets."""
 def tau_from_delta(delta, b, k) -> float:
     """(delta + (C(k,2) - 1) * b) / C(k,2)."""
+def compute_tau(sim_matrix, k, delta) -> float:
+    """tau for this k, on the fly: the formula fed with b. Called once per run."""
 
-# metrics.py (planned)
+# evaluation/metrics.py
 def ils(ids, sim_matrix) -> float: ...
-def relevance_preservation(ids, query_relevance) -> float: ...
-# trigger_rate and compute_cost are computed at the experiment level, across queries.
+def mean_relevance(ids, relevance: dict) -> float: ...
+# trigger rate and compute cost are averaged across queries in make_graphs.py.
 
-# experiment.py (planned)
-def run_all_methods(queries, corpus, config) -> ResultsTable:
-    """Run plain / MMR / gate over the query set, count comparisons, collect metrics."""
+# evaluation/experiment.py
+def load_queries(path) -> list[dict]: ...
+def run_one_query(query_emb, embeddings, sim_matrix, config, k, tau) -> dict:
+    """Plain, MMR and gate for one query: final ids, comparisons, ILS, relevance."""
+def run_experiment(queries, query_embs, embeddings, sim_matrix, config, k) -> list[dict]:
+    """One flat row per query and method, ready for CSV."""
 ```
 
 ## 7. Config schema
@@ -350,8 +359,7 @@ retrieval:
   pool_multiplier: 5           # DECIDED: pool_size = k * pool_multiplier
 
 gate:
-  tau: 0.807                   # DECIDED rule, from scripts/calibrate.py. Tied to k and
-                               # delta: rerun the script if either changes
+  tau: 0.781                   # placeholder only, never read: computed on the fly from delta and k
 
 repair:
   delta: 0.856                 # DECIDED rule, from scripts/calibrate.py (75% shared)
@@ -366,6 +374,11 @@ calibration:                   # read only by scripts/calibrate.py
   delta_shared_fraction: 0.75  # DECIDED: a duplicate shares about 75% of its sentences
   delta_percentile: 5          # DECIDED: delta = p5 of fake-duplicate similarities
   delta_seeds: [0, 1, 2, 3, 4] # DECIDED: average over 5 seeds to steady the estimate
+
+evaluation:                    # read by evaluation/make_graphs.py
+  queries_path: "data/queries.json"
+  results_dir: "results"
+  cost_vs_k: [3, 5, 10, 15]    # DECIDED: the k values for graph 2
 ```
 
 ## 8. Testing
@@ -379,5 +392,6 @@ calibration:                   # read only by scripts/calibrate.py
 
 Status: `tests/test_gate.py` covers the gate on the worked example, including a set
 that does not trip. `tests/test_calibrate.py` covers the tau formula, the random
-rounding, and how fake duplicates are built. MMR, repair (including pool exhaustion),
-and the metrics are not tested yet.
+rounding, and how fake duplicates are built. `tests/test_metrics.py` checks ILS and
+relevance against the worked example. MMR and repair (including pool exhaustion) are
+not tested yet.

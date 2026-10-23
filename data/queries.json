@@ -1,0 +1,609 @@
+{
+  "about": "Query set for the evaluation. 100 queries, written by Claude in-session and to be reviewed by the team. Rule: docs/EVALUATION.md, section 'Query set'.",
+  "rule": {
+    "narrow": "50 chunk ids drawn with random.Random(0).sample(range(136), 50). One question per chunk, aimed at a specific fact in that chunk.",
+    "broad": "50 questions on topics covered by at least two of the three articles (judged from their section headings)."
+  },
+  "queries": [
+    {
+      "id": "n01",
+      "type": "narrow",
+      "source_chunk": 7,
+      "text": "Can type 1 diabetes be idiopathic, or is it always caused by an autoimmune attack?"
+    },
+    {
+      "id": "n02",
+      "type": "narrow",
+      "source_chunk": 9,
+      "text": "What is latent autoimmune diabetes of adults (LADA)?"
+    },
+    {
+      "id": "n03",
+      "type": "narrow",
+      "source_chunk": 10,
+      "text": "What percentage of diabetes cases are type 2?"
+    },
+    {
+      "id": "n04",
+      "type": "narrow",
+      "source_chunk": 12,
+      "text": "When during pregnancy should women be tested for gestational diabetes?"
+    },
+    {
+      "id": "n05",
+      "type": "narrow",
+      "source_chunk": 17,
+      "text": "Where does the body get its glucose from?"
+    },
+    {
+      "id": "n06",
+      "type": "narrow",
+      "source_chunk": 18,
+      "text": "Which hormone acts opposite to insulin when blood sugar falls?"
+    },
+    {
+      "id": "n07",
+      "type": "narrow",
+      "source_chunk": 26,
+      "text": "Do non-nutritive sweeteners help people with diabetes compared to sugar?"
+    },
+    {
+      "id": "n08",
+      "type": "narrow",
+      "source_chunk": 27,
+      "text": "At what age does screening for type 2 diabetes start in obese children?"
+    },
+    {
+      "id": "n09",
+      "type": "narrow",
+      "source_chunk": 32,
+      "text": "Should adults with diabetes take low-dose aspirin to prevent heart disease?"
+    },
+    {
+      "id": "n10",
+      "type": "narrow",
+      "source_chunk": 33,
+      "text": "Can nerve decompression surgery treat diabetic peripheral neuropathy?"
+    },
+    {
+      "id": "n11",
+      "type": "narrow",
+      "source_chunk": 36,
+      "text": "How many deaths did the WHO attribute to diabetes in 2012?"
+    },
+    {
+      "id": "n12",
+      "type": "narrow",
+      "source_chunk": 39,
+      "text": "Who first isolated and purified insulin, and when?"
+    },
+    {
+      "id": "n13",
+      "type": "narrow",
+      "source_chunk": 40,
+      "text": "Where does the word mellitus come from?"
+    },
+    {
+      "id": "n14",
+      "type": "narrow",
+      "source_chunk": 42,
+      "text": "Are Hispanic adults in the US more likely to develop type 2 diabetes?"
+    },
+    {
+      "id": "n15",
+      "type": "narrow",
+      "source_chunk": 45,
+      "text": "Which dog breeds are most likely to develop diabetes?"
+    },
+    {
+      "id": "n16",
+      "type": "narrow",
+      "source_chunk": 55,
+      "text": "Which drugs can destroy beta cells and cause a diabetes-like syndrome?"
+    },
+    {
+      "id": "n17",
+      "type": "narrow",
+      "source_chunk": 56,
+      "text": "What is type 3c diabetes?"
+    },
+    {
+      "id": "n18",
+      "type": "narrow",
+      "source_chunk": 60,
+      "text": "When should rapid-acting insulin be taken before a meal in type 1 diabetes?"
+    },
+    {
+      "id": "n19",
+      "type": "narrow",
+      "source_chunk": 61,
+      "text": "What is pramlintide used for in type 1 diabetes?"
+    },
+    {
+      "id": "n20",
+      "type": "narrow",
+      "source_chunk": 64,
+      "text": "Does high-intensity interval training help people with type 1 diabetes?"
+    },
+    {
+      "id": "n21",
+      "type": "narrow",
+      "source_chunk": 66,
+      "text": "Why should exercise programs be tailored to the type of diabetes?"
+    },
+    {
+      "id": "n22",
+      "type": "narrow",
+      "source_chunk": 68,
+      "text": "What is Sana Biotechnology's hypo-immune islet approach?"
+    },
+    {
+      "id": "n23",
+      "type": "narrow",
+      "source_chunk": 70,
+      "text": "What is insulitis?"
+    },
+    {
+      "id": "n24",
+      "type": "narrow",
+      "source_chunk": 71,
+      "text": "How do beta cells actually die in type 1 diabetes?"
+    },
+    {
+      "id": "n25",
+      "type": "narrow",
+      "source_chunk": 74,
+      "text": "Why is the glucagon response to low blood sugar blunted in type 1 diabetes?"
+    },
+    {
+      "id": "n26",
+      "type": "narrow",
+      "source_chunk": 77,
+      "text": "What is the 15-15 rule for treating hypoglycemia?"
+    },
+    {
+      "id": "n27",
+      "type": "narrow",
+      "source_chunk": 78,
+      "text": "What is the leading cause of death in people with type 1 diabetes under 58?"
+    },
+    {
+      "id": "n28",
+      "type": "narrow",
+      "source_chunk": 79,
+      "text": "By how many years does cardiovascular disease shorten life in type 1 diabetes?"
+    },
+    {
+      "id": "n29",
+      "type": "narrow",
+      "source_chunk": 81,
+      "text": "What is retrograde ejaculation in men with diabetes?"
+    },
+    {
+      "id": "n30",
+      "type": "narrow",
+      "source_chunk": 87,
+      "text": "Does rotavirus vaccination reduce type 1 diabetes in young children?"
+    },
+    {
+      "id": "n31",
+      "type": "narrow",
+      "source_chunk": 90,
+      "text": "Does exercise lower HbA1c in children with type 1 diabetes?"
+    },
+    {
+      "id": "n32",
+      "type": "narrow",
+      "source_chunk": 92,
+      "text": "Who first linked diabetes to inflammation of the pancreatic islets?"
+    },
+    {
+      "id": "n33",
+      "type": "narrow",
+      "source_chunk": 93,
+      "text": "How much does diabetes cost the United States each year?"
+    },
+    {
+      "id": "n34",
+      "type": "narrow",
+      "source_chunk": 96,
+      "text": "What are NOD mice used for in diabetes research?"
+    },
+    {
+      "id": "n35",
+      "type": "narrow",
+      "source_chunk": 98,
+      "text": "How do alloxan and streptozotocin induce diabetes in lab animals?"
+    },
+    {
+      "id": "n36",
+      "type": "narrow",
+      "source_chunk": 102,
+      "text": "How does the PTPN22 gene affect the risk of type 1 diabetes?"
+    },
+    {
+      "id": "n37",
+      "type": "narrow",
+      "source_chunk": 103,
+      "text": "What is the risk of type 1 diabetes for siblings of someone who has it?"
+    },
+    {
+      "id": "n38",
+      "type": "narrow",
+      "source_chunk": 106,
+      "text": "How many people had type 2 diabetes in 2015?"
+    },
+    {
+      "id": "n39",
+      "type": "narrow",
+      "source_chunk": 107,
+      "text": "How much does type 2 diabetes shorten life expectancy?"
+    },
+    {
+      "id": "n40",
+      "type": "narrow",
+      "source_chunk": 114,
+      "text": "Does insulin resistance happen inside the beta cells themselves?"
+    },
+    {
+      "id": "n41",
+      "type": "narrow",
+      "source_chunk": 116,
+      "text": "What HbA1c level is used to diagnose diabetes?"
+    },
+    {
+      "id": "n42",
+      "type": "narrow",
+      "source_chunk": 120,
+      "text": "At what BMI should South Asian people start type 2 diabetes prevention?"
+    },
+    {
+      "id": "n43",
+      "type": "narrow",
+      "source_chunk": 122,
+      "text": "Can acarbose delay type 2 diabetes in people with prediabetes?"
+    },
+    {
+      "id": "n44",
+      "type": "narrow",
+      "source_chunk": 123,
+      "text": "What blood pressure target lowers the risk of death in type 2 diabetes?"
+    },
+    {
+      "id": "n45",
+      "type": "narrow",
+      "source_chunk": 124,
+      "text": "What is the usual HbA1c goal when treating type 2 diabetes?"
+    },
+    {
+      "id": "n46",
+      "type": "narrow",
+      "source_chunk": 126,
+      "text": "Do tree nuts lower fasting blood glucose in people with diabetes?"
+    },
+    {
+      "id": "n47",
+      "type": "narrow",
+      "source_chunk": 128,
+      "text": "When is insulin added for type 2 diabetes, and how is it usually started?"
+    },
+    {
+      "id": "n48",
+      "type": "narrow",
+      "source_chunk": 129,
+      "text": "What systolic blood pressure do the 2023 European guidelines recommend for people with diabetes?"
+    },
+    {
+      "id": "n49",
+      "type": "narrow",
+      "source_chunk": 130,
+      "text": "Should statins be used to prevent cardiovascular disease in diabetes?"
+    },
+    {
+      "id": "n50",
+      "type": "narrow",
+      "source_chunk": 132,
+      "text": "How many people had diabetes in 1985, 1995 and 2005?"
+    },
+    {
+      "id": "b01",
+      "type": "broad",
+      "topic": "symptoms",
+      "text": "What are the symptoms of diabetes?"
+    },
+    {
+      "id": "b02",
+      "type": "broad",
+      "topic": "symptoms",
+      "text": "What are the early warning signs of high blood sugar?"
+    },
+    {
+      "id": "b03",
+      "type": "broad",
+      "topic": "symptoms",
+      "text": "Why does diabetes cause frequent urination and thirst?"
+    },
+    {
+      "id": "b04",
+      "type": "broad",
+      "topic": "symptoms",
+      "text": "Can someone have diabetes without any symptoms?"
+    },
+    {
+      "id": "b05",
+      "type": "broad",
+      "topic": "complications",
+      "text": "What are the long-term complications of diabetes?"
+    },
+    {
+      "id": "b06",
+      "type": "broad",
+      "topic": "complications",
+      "text": "How does diabetes damage the eyes, kidneys and nerves?"
+    },
+    {
+      "id": "b07",
+      "type": "broad",
+      "topic": "complications",
+      "text": "How does diabetes affect the heart and blood vessels?"
+    },
+    {
+      "id": "b08",
+      "type": "broad",
+      "topic": "complications",
+      "text": "What is diabetic ketoacidosis?"
+    },
+    {
+      "id": "b09",
+      "type": "broad",
+      "topic": "complications",
+      "text": "What happens when blood sugar drops too low?"
+    },
+    {
+      "id": "b10",
+      "type": "broad",
+      "topic": "causes",
+      "text": "What causes diabetes?"
+    },
+    {
+      "id": "b11",
+      "type": "broad",
+      "topic": "causes",
+      "text": "What is the difference between type 1 and type 2 diabetes?"
+    },
+    {
+      "id": "b12",
+      "type": "broad",
+      "topic": "causes",
+      "text": "Is diabetes genetic?"
+    },
+    {
+      "id": "b13",
+      "type": "broad",
+      "topic": "causes",
+      "text": "How does obesity increase the risk of diabetes?"
+    },
+    {
+      "id": "b14",
+      "type": "broad",
+      "topic": "causes",
+      "text": "Which lifestyle factors lead to diabetes?"
+    },
+    {
+      "id": "b15",
+      "type": "broad",
+      "topic": "causes",
+      "text": "Can viruses or other environmental factors trigger diabetes?"
+    },
+    {
+      "id": "b16",
+      "type": "broad",
+      "topic": "pathophysiology",
+      "text": "What is insulin resistance?"
+    },
+    {
+      "id": "b17",
+      "type": "broad",
+      "topic": "pathophysiology",
+      "text": "How does insulin control blood sugar?"
+    },
+    {
+      "id": "b18",
+      "type": "broad",
+      "topic": "pathophysiology",
+      "text": "What goes wrong with the beta cells in diabetes?"
+    },
+    {
+      "id": "b19",
+      "type": "broad",
+      "topic": "pathophysiology",
+      "text": "What role does the pancreas play in diabetes?"
+    },
+    {
+      "id": "b20",
+      "type": "broad",
+      "topic": "diagnosis",
+      "text": "How is diabetes diagnosed?"
+    },
+    {
+      "id": "b21",
+      "type": "broad",
+      "topic": "diagnosis",
+      "text": "What blood sugar level counts as diabetes?"
+    },
+    {
+      "id": "b22",
+      "type": "broad",
+      "topic": "diagnosis",
+      "text": "What does the HbA1c test measure?"
+    },
+    {
+      "id": "b23",
+      "type": "broad",
+      "topic": "diagnosis",
+      "text": "What is prediabetes?"
+    },
+    {
+      "id": "b24",
+      "type": "broad",
+      "topic": "diagnosis",
+      "text": "What is an oral glucose tolerance test?"
+    },
+    {
+      "id": "b25",
+      "type": "broad",
+      "topic": "prevention",
+      "text": "Can diabetes be prevented?"
+    },
+    {
+      "id": "b26",
+      "type": "broad",
+      "topic": "prevention",
+      "text": "How does exercise lower the risk of getting diabetes?"
+    },
+    {
+      "id": "b27",
+      "type": "broad",
+      "topic": "prevention",
+      "text": "Which diet helps prevent diabetes?"
+    },
+    {
+      "id": "b28",
+      "type": "broad",
+      "topic": "management",
+      "text": "How is diabetes treated?"
+    },
+    {
+      "id": "b29",
+      "type": "broad",
+      "topic": "management",
+      "text": "How is insulin used to treat diabetes?"
+    },
+    {
+      "id": "b30",
+      "type": "broad",
+      "topic": "management",
+      "text": "What medications are used to control blood sugar?"
+    },
+    {
+      "id": "b31",
+      "type": "broad",
+      "topic": "management",
+      "text": "What is metformin and how does it help?"
+    },
+    {
+      "id": "b32",
+      "type": "broad",
+      "topic": "management",
+      "text": "What diet should people with diabetes follow?"
+    },
+    {
+      "id": "b33",
+      "type": "broad",
+      "topic": "management",
+      "text": "How does exercise help manage diabetes?"
+    },
+    {
+      "id": "b34",
+      "type": "broad",
+      "topic": "management",
+      "text": "How should people with diabetes monitor their blood sugar?"
+    },
+    {
+      "id": "b35",
+      "type": "broad",
+      "topic": "management",
+      "text": "What is a continuous glucose monitor?"
+    },
+    {
+      "id": "b36",
+      "type": "broad",
+      "topic": "management",
+      "text": "What blood sugar targets should people with diabetes aim for?"
+    },
+    {
+      "id": "b37",
+      "type": "broad",
+      "topic": "management",
+      "text": "How is blood pressure managed in people with diabetes?"
+    },
+    {
+      "id": "b38",
+      "type": "broad",
+      "topic": "management",
+      "text": "Can surgery help people with diabetes?"
+    },
+    {
+      "id": "b39",
+      "type": "broad",
+      "topic": "management",
+      "text": "What is a pancreas or islet transplant?"
+    },
+    {
+      "id": "b40",
+      "type": "broad",
+      "topic": "management",
+      "text": "How is diabetes managed in children?"
+    },
+    {
+      "id": "b41",
+      "type": "broad",
+      "topic": "management",
+      "text": "How is diabetes managed during pregnancy?"
+    },
+    {
+      "id": "b42",
+      "type": "broad",
+      "topic": "epidemiology",
+      "text": "How common is diabetes worldwide?"
+    },
+    {
+      "id": "b43",
+      "type": "broad",
+      "topic": "epidemiology",
+      "text": "Which groups of people are most at risk of diabetes?"
+    },
+    {
+      "id": "b44",
+      "type": "broad",
+      "topic": "epidemiology",
+      "text": "Why are diabetes rates rising?"
+    },
+    {
+      "id": "b45",
+      "type": "broad",
+      "topic": "epidemiology",
+      "text": "At what age does diabetes usually start?"
+    },
+    {
+      "id": "b46",
+      "type": "broad",
+      "topic": "history",
+      "text": "How was diabetes first described in history?"
+    },
+    {
+      "id": "b47",
+      "type": "broad",
+      "topic": "history",
+      "text": "How was insulin discovered?"
+    },
+    {
+      "id": "b48",
+      "type": "broad",
+      "topic": "society",
+      "text": "How much does diabetes cost society?"
+    },
+    {
+      "id": "b49",
+      "type": "broad",
+      "topic": "research",
+      "text": "What new treatments for diabetes are being researched?"
+    },
+    {
+      "id": "b50",
+      "type": "broad",
+      "topic": "research",
+      "text": "Can diabetes be cured?"
+    }
+  ]
+}

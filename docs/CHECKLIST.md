@@ -14,10 +14,11 @@ the detail belongs in the other three docs.
       Stages 2 to 6 are wired together in main.py, which runs ONE query through all
       three methods. Threshold calibration: src/calibrate.py, scripts/calibrate.py,
       tests/test_calibrate.py.
-- [ ] 7. Evaluation harness          <-- stages 1 to 7 are the 70 percent milestone.
-                                         Blocked on the query set decision.
+- [x] 7. Evaluation harness          <-- stages 1 to 7 are the 70 percent milestone.
+                                         evaluation/, queries in data/queries.json
 - [ ] 8. Full experiment run
 - [ ] 9. Analysis, tables, the five core graphs (EVALUATION.md)
+      evaluation/make_graphs.py draws all five, not yet run into results/
 - [ ] 10. Writeup and slides
 
 ## Settled
@@ -46,21 +47,28 @@ the detail belongs in the other three docs.
   of a chunk's sentences and swap the rest for another page's, mean of 5 seeds. Flags
   18 of 9,180 pairs. Known limit: 7 of 133 neighbor pairs also flagged. METHOD.md sec 5
 - `tau` = 0.807 at k=3 by formula: (delta + (C(k,2)-1) * b) / C(k,2), b = 0.782.
-  Rerun scripts/calibrate.py whenever k, corpus, or model changes. METHOD.md sec 4
+  Computed on the fly every run from delta and k, so changing k needs no script.
+  gate.tau in config is a placeholder. scripts/calibrate.py is only for delta
+  (rerun when corpus, chunking, or model changes). METHOD.md sec 4
 - Delta rule uses random rounding (75% exact on average). b = median of non-duplicate
   pseudo-query top-k pairs, each chunk excluded from its own top-k
 - Neighbor false-flag check: removed from code and eval, it never fed delta or tau.
   The one-time measurement (7 of 133) stays in METHOD.md sec 5 as evidence
 - Duplicate rate metric: dropped, it graded the gate with its own delta (circular)
-- Eval graphs, core set of 5: cost per query, cost vs k (3, 5, 10), signal histogram
-  with tau line, tripped vs not-tripped ILS and relevance, ILS vs relevance scatter.
+- Eval graphs, core set of 5: cost per query, cost vs k (3, 5, 10, 15), signal histogram
+  with tau line, tripped vs not-tripped ILS and relevance (dot plot), ILS vs relevance
+  scatter.
   Every number split tripped / not tripped. Data as CSVs in results/. Plotted with
   matplotlib. Details in EVALUATION.md
+- Query set: 100 = 50 narrow (one per seed-0 sampled chunk) + 50 broad (shared
+  topics), written by Claude, team reviews. Results also split broad / narrow. No
+  calibration split needed. Freeze rule is a strong default, bendable as a last resort
+- Evaluation code lives in evaluation/, apart from the method in src/
 
 ## Still open
 
-- Query set: how many queries, how they are generated, broad vs narrow mix, and
-  whether any of it is split off for calibration. Blocks the eval harness
+- Team review of data/queries.json (an action, not a decision): read all 100, fix or
+  drop bad ones, before the first real run into results/
 
 ## Gotchas to remember
 

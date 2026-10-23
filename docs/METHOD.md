@@ -90,8 +90,14 @@ honestly in evaluation (see EVALUATION.md).
 > duplicates. It is measured on pseudo-queries: each of the 136 chunks stands in as a
 > query, its top-k is taken from the other 135 chunks (the chunk itself is excluded, or
 > it would always be its own top-1), and `b` is the median of all the pair similarities
-> in those top-k sets that are at or below `delta`. Code: `src/calibrate.py`, run by
-> `scripts/calibrate.py`.
+> in those top-k sets that are at or below `delta`.
+>
+> **DECIDED: tau is computed on the fly.** `compute_tau` in `src/calibrate.py` runs
+> once at the start of every run (main.py and the evaluation), from the current
+> `delta`, `k`, and similarity matrix. It needs no model and takes milliseconds, so
+> changing k never needs a recalibration step and tau can never be stale. `gate.tau` in
+> config.yaml is only a placeholder and is never read. Being calibration rather than
+> part of answering a query, its lookups are not counted as comparisons.
 >
 > Current values, k = 3: `b` = 0.782, so tau = (0.856 + 2 * 0.782) / 3 = **0.807**. At
 > k = 5 the same rule gives `b` = 0.772 and tau = 0.780.

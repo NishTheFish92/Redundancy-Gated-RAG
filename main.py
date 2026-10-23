@@ -17,8 +17,8 @@ while returning the same thing.
 """
 
 import argparse
-import sys
 
+from src.calibrate import compute_tau
 from src.config import load_config, resolve_path
 from src.corpus import chunk_pages, load_pages
 from src.embed import build_or_load_embeddings, embed_query, similarity_matrix
@@ -70,26 +70,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Query the three retrieval methods.")
     parser.add_argument("query", help="the search query, in quotes")
     parser.add_argument("--k", type=int, default=None, help="override k from config")
-    parser.add_argument("--tau", type=float, default=None, help="override tau from config")
+    parser.add_argument("--tau", type=float, default=None,
+                        help="force a tau instead of computing it from delta and k")
     args = parser.parse_args()
 
     config = load_config()
     model_cfg = config["model"]
     k = args.k if args.k is not None else config["retrieval"]["k"]
-    tau = args.tau if args.tau is not None else config["gate"]["tau"]
     delta = config["repair"]["delta"]
     pool_size = k * config["retrieval"]["pool_multiplier"]
 
-    if args.k is not None and args.k != config["retrieval"]["k"]:
-        print(
-            f"WARNING: k overridden to {args.k}, but tau={tau} was calibrated for "
-            f"k={config['retrieval']['k']}. Gate signals shrink as k grows, so the "
-            f"trigger rate here is not meaningful. Rerun scripts/calibrate.py with "
-            f"the new k for a matching tau.\n",
-            file=sys.stderr,
-        )
-
     chunks, embeddings, sim_matrix = build_index(config)
+
+    # tau is worked out for this k on the fly (METHOD.md section 4). gate.tau in
+    # config.yaml is only a placeholder and is never read.
+    tau = args.tau if args.tau is not None else compute_tau(sim_matrix, k, delta)
 
     query_emb = embed_query(args.query, model_cfg["name"], model_cfg["device"])
 
@@ -99,7 +94,7 @@ def main() -> None:
     print("=" * 78)
     print(f"query : {args.query}")
     print(f"corpus: {len(chunks)} chunks | k={k}  pool={pool_size}  "
-          f"tau={tau}  delta={delta}")
+          f"tau={tau:.3f}  delta={delta}")
     print("=" * 78)
 
     # 1. Plain top-k. No chunk-to-chunk work at all.
@@ -113,7 +108,7 @@ def main() -> None:
     # 3. The gate method. Cheap check first, repair only if it trips.
     gate_result = run_gate(plain, sim_matrix, tau)
     print(f"\nGATE CHECK")
-    print(f"  signal {gate_result.signal:.4f} vs tau {tau}  ->  "
+    print(f"  signal {gate_result.signal:.4f} vs tau {tau:.3f}  ->  "
           f"{'TRIPPED, repairing' if gate_result.trips else 'clean, shipping plain top-k'}")
     for i, j, sim in gate_result.pairs:
         print(f"    c{i} <-> c{j}: {sim:.3f}{'   above delta' if sim > delta else ''}")
