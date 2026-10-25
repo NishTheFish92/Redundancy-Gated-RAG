@@ -1,14 +1,14 @@
 # CHECKLIST - where things stand
 
 Fast status board. Update it when a stage lands or a decision gets made. Keep it short,
-the detail belongs in the other three docs.
+the detail belongs in the other docs.
 
 ## Build stages
 
 - [x] 1. Corpus prep and chunking   <-- 136 chunks, see IMPLEMENTATION_PLAN.md sec 2
 - [x] 2. Embedding and similarity matrix   <-- src/embed.py, cached to data/cache
 - [x] 3. Plain top-k retrieval             <-- src/retrieve.py
-- [x] 4. MMR baseline                      <-- src/mmr.py
+- [x] 4. MMR baseline                      <-- src/mmr.py, no tests yet
 - [x] 5. Gate (signal plus trip decision)  <-- src/gate.py, tests/test_gate.py
 - [x] 6. Repair (dedup plus backfill)      <-- src/repair.py, no tests yet
       Stages 2 to 6 are wired together in main.py, which runs ONE query through all
@@ -16,22 +16,38 @@ the detail belongs in the other three docs.
       tests/test_calibrate.py.
 - [x] 7. Evaluation harness          <-- stages 1 to 7 are the 70 percent milestone.
                                          evaluation/, queries in data/queries.json
-- [ ] 8. Full experiment run
-- [ ] 9. Analysis, tables, the five core graphs (EVALUATION.md)
-      evaluation/make_graphs.py draws all five, not yet run into results/
+- [x] 8. Full experiment run         <-- 100 queries, results/per_query.csv
+- [x] 9. Analysis, tables, the five core graphs
+                                     <-- results/summary.csv, results/cost_vs_k.csv,
+                                         results/figures/, written up in EVALUATION.md
+                                         section Results
 - [ ] 10. Writeup and slides
+
+All 30 tests pass (`uv run pytest`).
+
+## Results at a glance (k = 3, 100 queries)
+
+- Cost: gate 4.26 comparisons per query, MMR 40, about 11 percent. Trigger rate 24%.
+- Tripped (24): ILS plain 0.825, gate 0.795, MMR 0.774. Relevance 0.729, 0.724, 0.722.
+- Not tripped (76): gate identical to plain. MMR changed 47 of them for ILS 0.773 to
+  0.745, relevance 0.709 to 0.705, at 40 comparisons each.
+- Cost vs k: gate share of MMR's cost falls to 3 percent at k = 15.
+- Weak spots to state plainly: MMR diversifies more; 9 of 24 tripped queries came out
+  unchanged; trigger rate rises to about 45% at k >= 5. Full list in EVALUATION.md.
 
 ## Settled
 
-- Layout: `src/` holds the real code, notebooks only drive and explore
+- Layout: `src/` holds the real code. No notebooks were needed
 - Corpus: 3 Wikipedia pages (Diabetes, Type 1, Type 2), fetched once and committed
 - Cleaning: strip References, External links, See also, Further reading, Notes, Works cited
 - Chunking: fixed 150 word windows, 0 overlap, drop trailing stubs under 30 words
 - Short fragments: drop, not merge. Measured cost is 18 words out of 20,304
 - Corpus size: 136 chunks (Diabetes 46, Type 1 59, Type 2 31), 20,304 cleaned words
 - Undecided knobs get a labelled interim default plus a NEEDS DECISION comment
+  (none remain)
 - Embeddings: L2 normalized, cosine equals dot product, one cached similarity matrix
 - BGE query prefix: applied to queries only, never to passages
+- Retrieval: plain numpy, no faiss
 - Tie-break: relevance desc, then chunk id asc, stable sort
 - k = 3 and tunable, pool_size = 5k
 - MMR lambda = 0.7
@@ -40,9 +56,11 @@ the detail belongs in the other three docs.
 - Multi-way redundancy: iterative worst pair (drop one chunk, recheck). Knob removed
 - Backfill check: `pairwise_delta`. Unimplemented alternative: `set_level_tau`
 - Pool exhaustion: `relax` (least-similar reject). Unimplemented alternatives:
-  `ship_fewer`, `mmr_pick`, `relevance_floor`, `delta_ladder`. Expected rare at k=3
+  `ship_fewer`, `mmr_pick`, `relevance_floor`, `delta_ladder`. Never fired in the full
+  run at k = 3, 5, 10, 15
 - Gate/repair mismatch (mean vs tau, pairs vs delta): accepted. Some redundancy can
-  reinforce facts; the risk of too much is handled by how tau and delta are set
+  reinforce facts; the risk of too much is handled by how tau and delta are set.
+  Measured: 9 of 24 tripped queries had no pair above delta and shipped unchanged
 - `delta` = 0.856 by the 75% shared-sentence rule: p5 of fake duplicates that keep 75%
   of a chunk's sentences and swap the rest for another page's, mean of 5 seeds. Flags
   18 of 9,180 pairs. Known limit: 7 of 133 neighbor pairs also flagged. METHOD.md sec 5
@@ -67,8 +85,12 @@ the detail belongs in the other three docs.
 
 ## Still open
 
-- Team review of data/queries.json (an action, not a decision): read all 100, fix or
-  drop bad ones, before the first real run into results/
+- Team review of data/queries.json: the checklist asked for it before the first real
+  run, and the run has now happened. Confirm it was done. If not, review now, and if any
+  query changes, rerun `evaluation/make_graphs.py` and note the change under the freeze
+  rule in EVALUATION.md
+- Stage 10: writeup and slides. EVALUATION.md section Results has the tables, headline
+  and weak spots to build them from
 
 ## Gotchas to remember
 
@@ -79,8 +101,8 @@ must be read off the measured distribution. A real tau of 0.35 would trip on eve
 query.
 
 The corpus is small, 136 chunks. A pool of 25 at k=5 is 18 percent of everything there
-is, so backfill running out of clean candidates is realistic at large k. At k=3 with
-delta 0.856 it should be rare, and the decided fallback is relax.
+is, so backfill running out of clean candidates looked realistic at large k. In the
+full run it never happened, at any k.
 
 BGE cannot fully tell "the next paragraph on the same subject" from "a 75 percent copy".
 Neighbors reach 0.896, above delta. This is a measured limit, not a bug. Say it plainly
@@ -90,3 +112,6 @@ Cleaning removes only about 2 percent of each article. The Wikipedia plaintext e
 had already dropped the citation text, so References arrives as an empty heading. The
 cleaning step is still correct, it just is not the big cut the plan originally implied.
 Do not overstate it in the writeup.
+
+The differences between methods sit in the second or third decimal. Never plot them as
+bars from zero or on a cut axis. Graph 4 is a dot plot for that reason.

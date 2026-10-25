@@ -1,7 +1,7 @@
 [project]
 name = "redundancy-gated-rag"
 version = "0.1.0"
-description = "Add your description here"
+description = "Redundancy-gated retrieval: diversify RAG context only when the top-k is redundant"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

@@ -10,11 +10,13 @@ first and the low-risk writeup work is left for the end.
 
 - Python, plain. No LangChain or LlamaIndex in the core pipeline.
 - Embeddings: `sentence-transformers`, model `BAAI/bge-base-en-v1.5`.
-- Retrieval: `faiss` or plain numpy cosine. For a corpus of a few thousand chunks,
-  numpy is fine and easier to explain.
+- Retrieval: plain numpy (DECIDED, as built). The corpus is 136 chunks, so `faiss`
+  would add a dependency and save nothing measurable.
 - Similarity matrix and metrics: numpy, with scikit-learn available if convenient.
 - Graphs: matplotlib (DECIDED). Standard, simple, and what every tutorial uses.
-- Config in a single YAML or Python config module. Every knob lives there.
+- Config: a single `config.yaml`, loaded by `src/config.py`. Every knob lives there.
+- Environment: `uv`, with torch pinned to the CPU-only wheels in `pyproject.toml` so all
+  three machines produce identical similarities.
 
 > **DECIDED (BGE usage details).** Both of bge-base-en-v1.5's easy-to-miss conventions
 > are applied. Both are fixed in `src/embed.py` rather than config knobs.
@@ -134,7 +136,8 @@ lower end of a pool that size is genuinely weak material rather than a deep rese
 good alternatives, which makes the pool exhaustion case in METHOD.md section 5 a
 realistic event at large k. The fallback is now decided (relax, METHOD.md section 5),
 and at k=3 with delta = 0.856 it is expected to be rare, since only 18 of the 9,180
-corpus pairs sit above delta.
+corpus pairs sit above delta. In the full run it never fired at all, at k = 3, 5, 10
+or 15.
 
 > **DECIDED (short-fragment handling): drop.** Trailing stubs under `min_chunk_words`
 > are discarded rather than merged into the previous chunk. This was left open until it
@@ -146,6 +149,9 @@ corpus pairs sit above delta.
 > global thresholds have to serve. Not worth it. The measured number is the viva answer.
 
 ## 3. Staged build order
+
+Status: stages 1 to 9 are done. Stage 10 (writeup and slides) is what remains. See
+docs/CHECKLIST.md.
 
 1. Corpus prep and chunking.
 2. Embedding and index build (bge-base, normalized, index or numpy matrix).
@@ -176,7 +182,7 @@ on a small query set.
 
 ## 5. Repo layout
 
-What exists now, with the parts not built yet marked `(planned)`.
+What exists now. Everything listed is built.
 
 ```
 project/
@@ -206,7 +212,6 @@ project/
   scripts/
     fetch_corpus.py      # run once, writes data/raw/*.txt and MANIFEST.json
     calibrate.py         # run when corpus, chunking, or model changes; prints delta
-  notebooks/             # (planned) exploration and figures only
   tests/
     conftest.py          # the METHOD.md worked example as a fixture
     test_gate.py         # gate against the worked example
@@ -220,10 +225,12 @@ project/
                          # summary.csv, cost_vs_k.csv, figures/
 ```
 
-Repair and MMR do not have tests yet. The worked example in
-METHOD.md section 7 covers all of them and should be wired up next.
+Repair and MMR do not have tests yet (see section 8).
 
-**DECIDED (notebooks versus modules).** `src/` holds the real code. Notebooks import
+**DECIDED (notebooks versus modules).** `src/` holds the real code. In the end no
+notebooks were needed: `main.py` covers poking at single queries, and
+`evaluation/make_graphs.py` produces every figure. The rule stands if one is added
+later. Notebooks import
 from it and never define pipeline logic. The reasons: the worked example has to run
 under `pytest`, which cannot easily import from a notebook; the comparison counters are
 the number the whole contribution rests on and must not drift between copy-pasted
@@ -327,7 +334,7 @@ the reasoning lives in these docs. An undecided knob gets a clearly labelled int
 default and a `NEEDS DECISION` comment, as CLAUDE.md describes. Right now every knob is
 decided.
 
-Copy as of the threshold calibration:
+Copy as of the full evaluation run:
 
 ```yaml
 model:
@@ -359,7 +366,7 @@ retrieval:
   pool_multiplier: 5           # DECIDED: pool_size = k * pool_multiplier
 
 gate:
-  tau: 0.781                   # placeholder only, never read: computed on the fly from delta and k
+  tau: 0.781                   # placeholder only computed on the fly from delta and k
 
 repair:
   delta: 0.856                 # DECIDED rule, from scripts/calibrate.py (75% shared)
@@ -393,5 +400,19 @@ evaluation:                    # read by evaluation/make_graphs.py
 Status: `tests/test_gate.py` covers the gate on the worked example, including a set
 that does not trip. `tests/test_calibrate.py` covers the tau formula, the random
 rounding, and how fake duplicates are built. `tests/test_metrics.py` checks ILS and
-relevance against the worked example. MMR and repair (including pool exhaustion) are
-not tested yet.
+relevance against the worked example. All 30 tests pass (`uv run pytest`). MMR and
+repair (including pool exhaustion) still have no unit tests. Both run on every query in
+the full run, but neither is checked against the worked example's {A, C, D}, and a
+reviewer may ask why the two functions the comparison rests on are the untested ones.
+
+## 9. How to run
+
+```
+uv sync                                         # install, CPU-only torch
+uv run pytest                                   # the worked example and calibration tests
+uv run python main.py "what causes type 2 diabetes"   # one query, all three methods
+uv run python evaluation/make_graphs.py         # full run: CSVs and graphs into results/
+uv run python scripts/calibrate.py              # only if corpus, chunking or model change
+```
+
+The first run downloads bge-base and builds the embedding cache. Later runs reuse it.

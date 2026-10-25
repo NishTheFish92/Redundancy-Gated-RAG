@@ -240,3 +240,15 @@ Current numbers, k = 3: `(0.856 + 2 * 0.782) / 3 = 0.807`. At k = 5, `b` = 0.772
 > average X comparisons per query for the gate method versus Y for always-on MMR, at a
 > Z percent trigger rate, with ILS falling from P to Q while relevance moves only from
 > R to T.
+
+Filled in from the full run (100 queries, k = 3, see EVALUATION.md, Results):
+
+> average **4.26** comparisons per query for the gate method versus **40** for always-on
+> MMR, at a **24** percent trigger rate, with ILS on the tripped queries falling from
+> **0.825** to **0.795** while relevance moves only from **0.729** to **0.724**.
+
+For comparison, MMR on the same tripped queries reaches ILS 0.774 at relevance 0.722.
+
+Checkable: MMR's 40 at k = 3 with a pool of 15 is round 2 scoring 14 candidates against
+1 picked chunk, plus round 3 scoring 13 candidates against 2, so 14 + 26 = 40. Round 1
+needs no chunk-to-chunk lookups.

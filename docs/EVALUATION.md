@@ -80,9 +80,10 @@ three methods side by side.
 > **DECIDED: dropped.** It counted pairs in the final set above `delta`. The gate
 > method's repair removes exactly those pairs using the same `delta`, so on every query
 > where repair ran the gate scored 0 percent by construction. It graded the method with
-> the method's own rule, which a reviewer would rightly call circular. Replacement
-> metrics that show real differences between the three methods, with outputs written to
-> a `results/` folder, are still to be designed. See docs/CHECKLIST.md.
+> the method's own rule, which a reviewer would rightly call circular. What replaced it
+> is not a new metric but a better way to report metrics 1 to 4: every number is split
+> into tripped and not-tripped queries (Reporting guidance below) and shown in the five
+> core graphs, with the raw numbers in `results/`.
 
 ## Metric 6: Downstream answer quality (STRETCH, optional)
 
@@ -172,7 +173,7 @@ so any plot can be redrawn and checked.
    k = 3 the saving is only microseconds". tau is re-derived for each k with the
    formula in METHOD.md section 4.
 3. **Where queries fall.** Histogram of the gate signal, one value per query (the mean
-   pair similarity of its plain top-k). X-axis is the signal, roughly 0.68 to 0.88, in
+   pair similarity of its plain top-k). X-axis is the signal, measured 0.686 to 0.869, in
    bins about 0.01 wide. Y-axis is the number of queries. A vertical line at tau.
    Bars left of the line in one colour (shipped as-is, cost C(k,2) lookups), bars to
    the right in another (tripped, repaired), each side labelled with its share of
@@ -207,3 +208,86 @@ the gate and MMR (shared chunks on tripped queries), and wall-clock time per que
 
 Produced by `uv run python evaluation/make_graphs.py`. The evaluation code lives in its
 own `evaluation/` folder, separate from the method in `src/`.
+
+## Results (the full run)
+
+All 100 queries, k = 3, pool 15, delta = 0.856, tau = 0.806 (computed on the fly; the
+docs round it to 0.807 from the rounded b, the CSVs keep the unrounded value), MMR
+lambda = 0.7. Numbers are copied from `results/summary.csv` and
+`results/cost_vs_k.csv`. If anything is rerun, refresh this section from those files
+rather than editing numbers by hand.
+
+### The headline
+
+> On average the gate method spends **4.26 similarity comparisons per query, against
+> 40 for always-on MMR** (about 11 percent of MMR's cost), at a **24 percent trigger
+> rate**. On the 24 queries that trip, ILS falls from 0.825 to 0.795 while relevance
+> moves only from 0.729 to 0.724. On the 76 that do not trip, the gate returns plain
+> top-k exactly, while MMR still changed 47 of them at the full 40 comparisons each.
+
+### Metrics 1 and 2: trigger rate and compute cost
+
+| Method | Avg comparisons per query | Trigger rate |
+| --- | --- | --- |
+| Plain top-k | 0 | n/a |
+| MMR | 40.0 | n/a (runs on every query) |
+| Gate | 4.26 | 24% (24 of 100) |
+
+The gate's 4.26 breaks down as 3 on each of the 76 queries that did not trip and 8.25
+on average on the 24 that did (3 for the gate plus 5.25 in repair).
+
+Cost as k grows (graph 2). tau is re-derived for every k.
+
+| k | tau | MMR | Gate | Gate as share of MMR | Trigger rate |
+| --- | --- | --- | --- | --- | --- |
+| 3 | 0.806 | 40 | 4.26 | 11% | 24% |
+| 5 | 0.780 | 220 | 18.41 | 8% | 46% |
+| 10 | 0.760 | 1,965 | 91.42 | 5% | 44% |
+| 15 | 0.749 | 6,860 | 224.58 | 3% | 43% |
+
+### Metrics 3 and 4: ILS and relevance
+
+| Queries | Method | ILS (lower is better) | Relevance | Changed vs plain |
+| --- | --- | --- | --- | --- |
+| All 100 | Plain | 0.786 | 0.714 | 0% |
+| | MMR | 0.752 | 0.709 | 65% |
+| | Gate | 0.778 | 0.713 | 15% |
+| Tripped (24) | Plain | 0.825 | 0.729 | 0% |
+| | MMR | 0.774 | 0.722 | 75% |
+| | Gate | 0.795 | 0.724 | 63% |
+| Not tripped (76) | Plain | 0.773 | 0.709 | 0% |
+| | MMR | 0.745 | 0.705 | 62% |
+| | Gate | 0.773 | 0.709 | 0% |
+
+Broad and narrow queries behave alike: trigger rate 26 percent on broad, 22 percent on
+narrow, and the same ordering of the three methods in both groups. The query mix is
+therefore not what drives the result.
+
+### Honest weak spots (say these in the writeup and the viva)
+
+- **MMR diversifies more than the gate.** On tripped queries MMR cuts ILS by 0.051,
+  the gate by 0.030, so the gate gets about 60 percent of MMR's diversity gain there,
+  for about 21 percent of its cost (8.25 versus 40 comparisons). Over all 100 queries
+  the gate gets about 22 percent of MMR's ILS reduction. This matches the pitch in
+  METHOD.md section 2: comparable quality where it is needed, at a fraction of the
+  cost, not "beats MMR". Per query, the gate's ILS is at or below MMR's on 11 of the 24
+  tripped queries (9 of those are the same set).
+- **9 of the 24 tripped queries came out unchanged.** Their mean was above tau but no
+  single pair was above delta, so dedup had nothing to drop and the 3 dedup lookups
+  bought nothing. This is the accepted gate and repair mismatch in METHOD.md section 5,
+  now measured. It is why only 15 percent of queries changed overall.
+- **MMR on not-tripped queries is not pure waste.** It does lower ILS (0.773 to 0.745)
+  for a small relevance cost (0.709 to 0.705). The argument is that this gain is small
+  and the 40 comparisons are paid on every one of those 76 queries, not that MMR gains
+  nothing.
+- **The trigger rate is not constant across k.** It roughly doubles from k = 3 (24
+  percent) to k = 5 (46 percent) and then stays near 44 percent. The tau formula keeps
+  the meaning of tau the same for every k, not the trigger rate. The cost saving still
+  widens with k, because MMR's cost grows much faster than the gate's.
+- **The relax fallback never fired**, at any of k = 3, 5, 10, 15. Pool exhaustion is a
+  real edge case in the code but did not occur on this corpus and query set.
+- The absolute differences are small (second or third decimal), because BGE's high
+  similarity floor compresses every score into roughly 0.65 to 0.90. Graph 4 uses a
+  dot plot for exactly this reason.
+
+Downstream answer quality (metric 6, stretch) was not run.

@@ -1,9 +1,10 @@
 # METHOD.md - The Method (FIXED)
 
 This document specifies the method. The shape of the pipeline is settled and should
-not be redesigned. Where a specific rule or value is still undecided, it is marked
-with a **NEEDS DECISION** callout. Those callouts are not license to redesign the
-method, they are points where the team must pick a rule before you hardcode one.
+not be redesigned. Every rule that was once open is now marked **DECIDED** with its
+reasoning, and no **NEEDS DECISION** callouts remain. The method is fully implemented
+in `src/`, and its measured behaviour on the full query set is in EVALUATION.md,
+Results.
 
 ---
 
@@ -123,9 +124,14 @@ honestly in evaluation (see EVALUATION.md).
 > duplicate-free pair. And each chunk is excluded from its own top-k, or it would always
 > be its own top-1.
 >
-> **Caveat.** `b` comes from chunks standing in as queries. Once the real query set
-> exists, `b` could be re-measured on it, but only on a calibration split, never on the
-> queries the results are reported on.
+> **Caveat.** `b` comes from chunks standing in as queries. It could in principle be
+> re-measured on real queries, but only on a calibration split, never on the queries
+> the results are reported on. The query set was decided with no calibration split
+> (EVALUATION.md, Query set), so `b` stays on the pseudo-queries and all 100 real
+> queries are used only for evaluation.
+>
+> Measured on the real queries: the gate trips on 24 percent at k = 3, close to the
+> 24.3 percent seen on the pseudo-queries.
 >
 > EVALUATION.md's sensitivity sweep over `tau` still applies.
 
@@ -256,6 +262,10 @@ The details below were open and are now settled, each with its reasoning.
 > score), `relevance_floor` (least similar, but only among rejects close in relevance
 > to the top chunk), and `delta_ladder` (raise `delta` a fixed number of times and take
 > the most relevant reject that passes, then fall back to relax).
+>
+> **Measured: relax never fired.** Across all 100 evaluation queries at k = 3, 5, 10
+> and 15, no query ran out of clean candidates. Relax did not turn out to matter, so the
+> alternatives were not needed.
 
 > **DECIDED (gate and repair use different tests).** The gate trips on the set mean
 > against `tau`, while dedup acts on single pairs against `delta`. These do not always
@@ -266,6 +276,11 @@ The details below were open and are now settled, each with its reasoning.
 > reinforce context and facts rather than waste it. The real risk is too much
 > redundancy getting through, for example if `tau` were set so high that the gate
 > almost never trips, and that is handled when `tau` and `delta` are set.
+>
+> **Measured: 9 of the 24 tripped queries came out unchanged** at k = 3. Their mean was
+> above tau but no pair was above delta, so each spent 6 comparisons (3 gate, 3 dedup)
+> and shipped plain top-k anyway. This is the first case above, and it is in the
+> results as a stated weak spot (EVALUATION.md, Results).
 
 > **DECIDED (similarity space).** All embeddings are L2-normalized at encode time, so
 > cosine similarity is a plain dot product. Queries and passages are normalized
@@ -321,15 +336,18 @@ to be. Do not read the example's `delta = 0.8` and `tau = 0.35` as starting valu
 the real corpus. BGE has a high similarity floor: unrelated English text commonly
 scores around 0.6 to 0.7 rather than near 0, so a real `tau` of 0.35 would trip on
 every query. Real thresholds must be read off the measured distribution, which is what
-the sensitivity sweep in EVALUATION.md is for.
+the calibration in sections 4 and 5 does.
 
 ## 8. Known edge cases to handle (not to gloss over)
 
 - **Full redundancy triangle at small k.** DECIDED, see the multi-way redundancy note
   in section 5.
 - **Pool exhaustion during backfill.** DECIDED, see the fallback note in section 5.
+  Never occurred in the full run.
 - **Gate never fires on a too-diverse corpus.** Not a bug in the method, but it makes
-  results look flat. Handled at the dataset level, see IMPLEMENTATION_PLAN.md.
+  results look flat. Handled at the dataset level, see IMPLEMENTATION_PLAN.md. On the
+  chosen corpus the gate fires on 24 percent of queries at k = 3, so this did not
+  happen.
 - **Ties in relevance ordering.** DECIDED: sort by relevance descending, break ties by
   chunk id ascending, using a stable sort. This applies everywhere an ordering is
   taken: pool ordering, plain top-k, the dedup keep/drop choice, and backfill order.
